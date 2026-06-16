@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "poetica"
-version = "0.1.1"
+version = "0.1.2"
 description = "Curriculum-aware STEM learning: visual-first, label-second coding from syllabus to student evidence."
 readme = "README.md"
 license = "Apache-2.0"
