@@ -1,5 +1,6 @@
 """Tests for the poetica standalone package."""
 
+import json
 import subprocess
 import sys
 import textwrap
@@ -10,6 +11,8 @@ from poetica.compiler import PoeticaCompiler
 from poetica.gate import Gate, GateError, GateLevel
 from poetica.receipt import Receipt
 from poetica.emitters import get_emitter, list_targets
+from poetica.intent import Intent, IntentError, parse_intent
+from poetica.cmd import CmdReceipt, run_cmd
 
 
 # --- Parser ---
@@ -562,3 +565,167 @@ class TestExecution:
         for target in ["sonnet", "haiku", "ballad", "ode", "prose", "verse"]:
             code = compile_poem(source, target=target, level=4)
             assert len(code) > 10
+
+
+# --- Intent parser ---
+
+class TestIntent:
+    def test_apt_update(self):
+        intent = parse_intent("apt update")
+        assert intent.op == "package.update_index"
+        assert intent.argv == ["sudo", "apt", "update"]
+        assert intent.level == 4
+
+    def test_update_package_index(self):
+        intent = parse_intent("update package index")
+        assert intent.op == "package.update_index"
+
+    def test_refresh_packages(self):
+        intent = parse_intent("refresh packages")
+        assert intent.op == "package.update_index"
+
+    def test_apt_upgrade(self):
+        intent = parse_intent("apt upgrade")
+        assert intent.op == "package.upgrade"
+        assert "-y" not in intent.argv
+
+    def test_apt_upgrade_yes(self):
+        intent = parse_intent("apt upgrade", yes=True)
+        assert intent.op == "package.upgrade"
+        assert "-y" in intent.argv
+
+    def test_install_package(self):
+        intent = parse_intent("install curl")
+        assert intent.op == "package.install"
+        assert intent.argv == ["sudo", "apt", "install", "curl"]
+        assert intent.params["package"] == "curl"
+
+    def test_install_with_yes(self):
+        intent = parse_intent("install curl", yes=True)
+        assert intent.argv == ["sudo", "apt", "install", "-y", "curl"]
+
+    def test_install_invalid_package(self):
+        with pytest.raises(IntentError):
+            parse_intent("install ; rm -rf /")
+
+    def test_install_empty_package(self):
+        with pytest.raises(IntentError):
+            parse_intent("install ")
+
+    def test_ls(self):
+        intent = parse_intent("ls")
+        assert intent.op == "fs.list"
+        assert intent.argv == ["ls", "-la"]
+        assert intent.level == 1
+
+    def test_list_files(self):
+        intent = parse_intent("list files")
+        assert intent.op == "fs.list"
+
+    def test_pwd(self):
+        intent = parse_intent("pwd")
+        assert intent.op == "fs.pwd"
+        assert intent.argv == ["pwd"]
+        assert intent.level == 1
+
+    def test_where_am_i(self):
+        intent = parse_intent("where am i")
+        assert intent.op == "fs.pwd"
+
+    def test_unknown_intent(self):
+        with pytest.raises(IntentError):
+            parse_intent("hack the planet")
+
+    def test_empty_input(self):
+        with pytest.raises(IntentError):
+            parse_intent("")
+
+    def test_case_insensitive(self):
+        intent = parse_intent("APT UPDATE")
+        assert intent.op == "package.update_index"
+
+
+# --- Cmd pipeline ---
+
+class TestCmd:
+    def test_dry_run_does_not_execute(self):
+        receipt = run_cmd("ls", level=1, approve=False)
+        assert receipt.executed is False
+        assert receipt.approved is False
+        assert receipt.gate_decision == "ALLOW"
+        assert receipt.emitted_command == ["ls", "-la"]
+
+    def test_apt_update_requires_l4(self):
+        receipt = run_cmd("apt update", level=1)
+        assert receipt.gate_decision == "REJECT"
+        assert receipt.approved is False
+        assert receipt.executed is False
+
+    def test_apt_update_allowed_at_l4(self):
+        receipt = run_cmd("apt update", level=4)
+        assert receipt.gate_decision == "ALLOW"
+        assert receipt.approved is False  # dry-run default
+
+    def test_ls_allowed_at_l1(self):
+        receipt = run_cmd("ls", level=1)
+        assert receipt.gate_decision == "ALLOW"
+        assert receipt.parsed_intent == "fs.list"
+
+    def test_pwd_allowed_at_l1(self):
+        receipt = run_cmd("pwd", level=1)
+        assert receipt.gate_decision == "ALLOW"
+        assert receipt.emitted_command == ["pwd"]
+
+    def test_approve_executes_safe_command(self):
+        receipt = run_cmd("pwd", level=1, approve=True)
+        assert receipt.executed is True
+        assert receipt.approved is True
+        assert receipt.exit_code == 0
+        assert len(receipt.stdout_hash) == 64
+        assert len(receipt.stderr_hash) == 64
+
+    def test_approve_ls_executes(self):
+        receipt = run_cmd("ls", level=1, approve=True)
+        assert receipt.executed is True
+        assert receipt.exit_code == 0
+
+    def test_receipt_to_json(self):
+        receipt = run_cmd("pwd", level=1)
+        j = json.loads(receipt.to_json())
+        assert j["schema"] == "poetica.cmd.receipt.v1"
+        assert j["original_text"] == "pwd"
+        assert j["parsed_intent"] == "fs.pwd"
+        assert j["emitted_command"] == ["pwd"]
+        assert j["gate_decision"] == "ALLOW"
+        assert j["approved"] is False
+        assert j["executed"] is False
+        assert "timestamp" in j
+
+    def test_receipt_executed_has_hashes(self):
+        receipt = run_cmd("pwd", level=1, approve=True)
+        j = json.loads(receipt.to_json())
+        assert "exit_code" in j
+        assert "stdout_hash" in j
+        assert "stderr_hash" in j
+
+    def test_receipt_dry_run_no_hashes(self):
+        receipt = run_cmd("pwd", level=1, approve=False)
+        j = json.loads(receipt.to_json())
+        assert "exit_code" not in j
+        assert "stdout_hash" not in j
+
+    def test_upgrade_yes_flag(self):
+        receipt = run_cmd("apt upgrade", level=4, yes=True)
+        assert "-y" in receipt.emitted_command
+
+    def test_upgrade_no_yes_flag(self):
+        receipt = run_cmd("apt upgrade", level=4, yes=False)
+        assert "-y" not in receipt.emitted_command
+
+    def test_install_no_package_rejects(self):
+        with pytest.raises(IntentError):
+            run_cmd("install ", level=4)
+
+    def test_unknown_intent_raises(self):
+        with pytest.raises(IntentError):
+            run_cmd("do something weird", level=1)

@@ -17,6 +17,8 @@ from poetica.compiler import PoeticaCompiler
 from poetica.gate import Gate, GateError
 from poetica.receipt import Receipt
 from poetica.emitters import get_emitter, list_targets
+from poetica.cmd import run_cmd
+from poetica.intent import IntentError
 
 
 def cmd_compile(args):
@@ -66,6 +68,25 @@ def cmd_targets(args):
     targets = list_targets()
     for poem_type, lang in targets.items():
         print(f"  {poem_type:10s} -> {lang}")
+
+
+def cmd_nl(args):
+    """NL text → gated shell command → dry-run or execute → receipt."""
+    try:
+        receipt = run_cmd(
+            text=args.text,
+            level=args.level,
+            approve=args.approve,
+            yes=args.yes,
+        )
+    except IntentError as e:
+        print(f"Intent error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    print(receipt.to_json())
+    if not receipt.approved:
+        if receipt.gate_decision == "REJECT":
+            sys.exit(1)
 
 
 def cmd_check(args):
@@ -120,6 +141,19 @@ def main():
     chk.add_argument("file", help="Path to .poem file (or - for stdin)")
     chk.add_argument("--level", "-l", type=int, default=1, help="Capability level 1-5 (default: 1)")
     chk.set_defaults(func=cmd_check)
+
+    # cmd
+    cmd = sub.add_parser("cmd", help="NL to gated shell command")
+    cmd.add_argument("text", help="Natural language command")
+    cmd.add_argument("--dry-run", action="store_true", default=True,
+                     help="Show what would run without executing (default)")
+    cmd.add_argument("--approve", action="store_true",
+                     help="Actually execute the command")
+    cmd.add_argument("--level", "-l", type=int, default=1,
+                     help="Gate level 1-5 (default: 1)")
+    cmd.add_argument("--yes", "-y", action="store_true",
+                     help="Auto-confirm for apt commands")
+    cmd.set_defaults(func=cmd_nl)
 
     args = p.parse_args()
     if not args.command:
