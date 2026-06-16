@@ -1,0 +1,12 @@
+# Data pipeline — Level 4 (external)
+name data_pipeline
+
+seed readings with [72, 68, 75, 71, 69]
+seed threshold with 70
+for each val in readings:
+    when val > threshold:
+        emit "above" val
+pack readings as json
+lift readings_json to "readings.json"
+emit "pipeline complete"
+bloom "done"

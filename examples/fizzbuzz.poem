@@ -1,0 +1,13 @@
+# FizzBuzz — Level 2 (logic)
+name fizzbuzz
+
+seed numbers with range(1, 16)
+for each n in numbers:
+    if n % 15 echoes 0
+        emit "FizzBuzz"
+    else when n % 3 == 0:
+        emit "Fizz"
+    else when n % 5 == 0:
+        emit "Buzz"
+    else:
+        emit n

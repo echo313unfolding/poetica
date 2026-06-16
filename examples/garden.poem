@@ -1,0 +1,12 @@
+# Grow a garden — Level 3 (transformation)
+name garden
+
+seed plants with []
+grow plants with "tomato"
+grow plants with "basil"
+grow plants with "pepper"
+for each plant in plants:
+    emit "growing" plant
+pack plants as json
+emit plants_json
+bloom "harvest complete"
