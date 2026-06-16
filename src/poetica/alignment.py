@@ -90,10 +90,22 @@ class AlignmentSpan:
     explanation: str
     gate_level: int
     visual: str = ""
+    # Domain provenance (filled when --domain is used)
+    domain_original: str = ""   # original phrase before rewrite
+    domain_concept: str = ""    # domain-specific concept name
+    domain_visual: str = ""     # domain-specific visual description
 
 
-def align_poem(source: str, target: str = "python") -> List[AlignmentSpan]:
-    """Produce alignment spans mapping source phrases to target code."""
+def align_poem(source: str, target: str = "python",
+               rewrites: list = None) -> List[AlignmentSpan]:
+    """Produce alignment spans mapping source phrases to target code.
+
+    Args:
+        source: Canonical Poetica source (after domain preprocessing).
+        target: Target language name.
+        rewrites: Optional list of DomainRewrite provenance records from
+                  DomainPack.preprocess_with_map().
+    """
     parser = PoeticaParser()
     compiler = PoeticaCompiler()
     elements = parser.parse(source)
@@ -109,6 +121,12 @@ def align_poem(source: str, target: str = "python") -> List[AlignmentSpan]:
         stripped = raw_line.strip()
         if stripped and not stripped.startswith('#'):
             line_map.append((line_num, raw_line.strip(), raw_line))
+
+    # Index rewrites by line number for fast lookup
+    rewrite_by_line = {}
+    if rewrites:
+        for rw in rewrites:
+            rewrite_by_line[rw.line_num] = rw
 
     # Name offset — name element is consumed by compiler
     name_offset = 1 if elements and elements[0].kind == 'name' else 0
@@ -152,6 +170,16 @@ def align_poem(source: str, target: str = "python") -> List[AlignmentSpan]:
         # Visual description — what you'd SEE happening
         visual = _format_visual(op_name, op)
 
+        # Domain provenance
+        domain_original = ""
+        domain_concept = ""
+        domain_visual = ""
+        rw = rewrite_by_line.get(src_line)
+        if rw:
+            domain_original = rw.original_text
+            domain_concept = rw.domain_concept
+            domain_visual = rw.domain_visual
+
         spans.append(AlignmentSpan(
             source_line=src_line,
             source_start=src_start,
@@ -165,6 +193,9 @@ def align_poem(source: str, target: str = "python") -> List[AlignmentSpan]:
             explanation=explanation,
             gate_level=gate_level,
             visual=visual,
+            domain_original=domain_original,
+            domain_concept=domain_concept,
+            domain_visual=domain_visual,
         ))
 
     return spans
@@ -213,7 +244,11 @@ def to_annotated(spans: List[AlignmentSpan]) -> str:
 
     lines = []
     for span in spans:
-        lines.append(span.source_text)
+        if span.domain_original:
+            lines.append(f"{span.domain_original}  [domain: {span.domain_concept}]")
+            lines.append(f"  => {span.source_text}")
+        else:
+            lines.append(span.source_text)
         target_first = span.target_text.split('\n')[0]
         lines.append(f"  -> [{span.concept}] {target_first}    "
                       f'"{span.explanation}" (L{span.gate_level})')
@@ -221,13 +256,20 @@ def to_annotated(spans: List[AlignmentSpan]) -> str:
 
 
 def to_lesson(spans: List[AlignmentSpan]) -> str:
-    """Render alignment spans as 4-layer lessons. No naked syntax.
+    """Render alignment spans as layered lessons. No naked syntax.
 
-    Each op shows:
+    Without domain (4 layers):
       Visual:  what you'd SEE
       Phrase:  the Poetica source
       Concept: the formal name
       Code:    the target syntax
+
+    With domain provenance (5 layers):
+      Original: the domain phrase (what the learner wrote)
+      Canonical: the Poetica phrase (what it became)
+      Concept:  the domain concept (field-specific name)
+      Code:     the target syntax
+      Visual:   what you'd SEE (domain-specific when available)
     """
     if not spans:
         return "(no operations)"
@@ -237,10 +279,21 @@ def to_lesson(spans: List[AlignmentSpan]) -> str:
         if i > 0:
             lines.append("")
         target_first = span.target_text.split('\n')[0]
-        lines.append(f"  Visual:  {span.visual}")
-        lines.append(f"  Phrase:  {span.source_text}")
-        lines.append(f"  Concept: {span.concept} ({span.explanation})")
-        lines.append(f"  Code:    {target_first}")
+        if span.domain_original:
+            # 5-layer domain lesson
+            visual = span.domain_visual or span.visual
+            concept = span.domain_concept or span.concept
+            lines.append(f"  Original:  {span.domain_original}")
+            lines.append(f"  Canonical: {span.source_text}")
+            lines.append(f"  Concept:   {concept}")
+            lines.append(f"  Code:      {target_first}")
+            lines.append(f"  Visual:    {visual}")
+        else:
+            # Standard 4-layer lesson
+            lines.append(f"  Visual:  {span.visual}")
+            lines.append(f"  Phrase:  {span.source_text}")
+            lines.append(f"  Concept: {span.concept} ({span.explanation})")
+            lines.append(f"  Code:    {target_first}")
 
     return "\n".join(lines)
 
@@ -250,7 +303,7 @@ def to_json(spans: List[AlignmentSpan]) -> str:
     import json
     data = []
     for span in spans:
-        data.append({
+        entry = {
             "source_line": span.source_line,
             "source_start": span.source_start,
             "source_end": span.source_end,
@@ -263,5 +316,10 @@ def to_json(spans: List[AlignmentSpan]) -> str:
             "visual": span.visual,
             "explanation": span.explanation,
             "gate_level": span.gate_level,
-        })
+        }
+        if span.domain_original:
+            entry["domain_original"] = span.domain_original
+            entry["domain_concept"] = span.domain_concept
+            entry["domain_visual"] = span.domain_visual
+        data.append(entry)
     return json.dumps(data, indent=2)

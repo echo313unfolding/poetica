@@ -1411,3 +1411,172 @@ class TestDomainPacks:
         pack = load_domain(path)
         result = pack.preprocess("flag project risk")
         assert 'remember project: "at_risk"' in result
+
+    # --- Domain Provenance Tests ---
+
+    def test_preprocess_with_map_returns_rewrites(self):
+        pack = DomainPack(
+            name="test", domain="test_domain",
+            terms={
+                "sensor.distance": {
+                    "maps_to": "sensor_distance",
+                    "concept": "distance sensor reading",
+                    "visual": "a distance gauge",
+                },
+            },
+        )
+        canonical, rewrites = pack.preprocess_with_map("seed sensor.distance with 25")
+        assert canonical == "seed sensor_distance with 25"
+        assert len(rewrites) == 1
+        rw = rewrites[0]
+        assert rw.original_text == "seed sensor.distance with 25"
+        assert rw.canonical_text == "seed sensor_distance with 25"
+        assert rw.domain == "test_domain"
+        assert rw.rewrite_type == "term"
+        assert rw.domain_concept == "distance sensor reading"
+
+    def test_preprocess_with_map_phrase_rewrite(self):
+        pack = DomainPack(
+            name="test", domain="robotics",
+            terms={"motor.speed": {"maps_to": "motor_speed"}},
+            phrases={
+                "stop motor": {
+                    "pattern": "seed motor.speed with 0",
+                    "concept": "emergency stop",
+                    "visual": "the motor halts immediately",
+                },
+            },
+        )
+        canonical, rewrites = pack.preprocess_with_map("stop motor")
+        assert "motor_speed" in canonical
+        assert len(rewrites) == 1
+        rw = rewrites[0]
+        assert rw.original_text == "stop motor"
+        assert rw.rewrite_type == "phrase"
+        assert rw.domain_concept == "emergency stop"
+        assert rw.domain_visual == "the motor halts immediately"
+
+    def test_preprocess_with_map_no_rewrite(self):
+        pack = DomainPack(name="test", domain="test")
+        canonical, rewrites = pack.preprocess_with_map("seed x with 1")
+        assert canonical == "seed x with 1"
+        assert len(rewrites) == 0
+
+    def test_preprocess_with_map_skips_comments(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            terms={"x.y": {"maps_to": "x_y"}},
+        )
+        canonical, rewrites = pack.preprocess_with_map("# comment\nseed x.y with 1")
+        assert "# comment" in canonical
+        # Only the seed line generates a rewrite, not the comment
+        assert len(rewrites) == 1
+
+    def test_alignment_domain_provenance_fields(self):
+        """align_poem with rewrites populates domain fields on AlignmentSpan."""
+        pack = DomainPack(
+            name="test", domain="robotics",
+            terms={
+                "sensor.distance": {
+                    "maps_to": "sensor_distance",
+                    "concept": "distance reading",
+                    "visual": "distance gauge reads",
+                },
+            },
+        )
+        source = "name test\nseed sensor.distance with 25\nemit sensor.distance"
+        canonical, rewrites = pack.preprocess_with_map(source)
+        spans = align_poem(canonical, target="python", rewrites=rewrites)
+        # Find the seed span
+        seed_spans = [s for s in spans if s.ir_op == "seed"]
+        assert len(seed_spans) >= 1
+        seed = seed_spans[0]
+        assert seed.domain_original == "seed sensor.distance with 25"
+        assert seed.domain_concept == "distance reading"
+
+    def test_lesson_5_layer_with_domain(self):
+        """to_lesson shows 5 layers (Original/Canonical/Concept/Code/Visual) for domain ops."""
+        pack = DomainPack(
+            name="test", domain="robotics",
+            terms={
+                "motor.speed": {"maps_to": "motor_speed"},
+            },
+            phrases={
+                "stop motor": {
+                    "pattern": "seed motor.speed with 0",
+                    "concept": "emergency stop",
+                    "visual": "the motor halts immediately",
+                },
+            },
+        )
+        source = "name test\nstop motor"
+        canonical, rewrites = pack.preprocess_with_map(source)
+        spans = align_poem(canonical, target="python", rewrites=rewrites)
+        output = to_lesson(spans)
+        assert "Original:" in output
+        assert "Canonical:" in output
+        assert "stop motor" in output
+        assert "motor_speed" in output
+
+    def test_lesson_4_layer_without_domain(self):
+        """to_lesson shows standard 4 layers for non-domain ops."""
+        spans = align_poem("name test\nseed x with 1", target="python")
+        output = to_lesson(spans)
+        assert "Visual:" in output
+        assert "Phrase:" in output
+        assert "Concept:" in output
+        assert "Code:" in output
+        assert "Original:" not in output
+
+    def test_annotated_shows_domain_original(self):
+        """to_annotated shows domain original phrase when available."""
+        pack = DomainPack(
+            name="test", domain="robotics",
+            terms={
+                "motor.speed": {"maps_to": "motor_speed"},
+            },
+            phrases={
+                "stop motor": {
+                    "pattern": "seed motor.speed with 0",
+                    "concept": "emergency stop",
+                    "visual": "motor halts",
+                },
+            },
+        )
+        source = "name test\nstop motor"
+        canonical, rewrites = pack.preprocess_with_map(source)
+        spans = align_poem(canonical, target="python", rewrites=rewrites)
+        output = to_annotated(spans)
+        assert "stop motor" in output
+        assert "[domain: emergency stop]" in output
+
+    def test_json_includes_domain_provenance(self):
+        """to_json includes domain fields when present."""
+        import json as _json
+        pack = DomainPack(
+            name="test", domain="robotics",
+            terms={
+                "sensor.distance": {
+                    "maps_to": "sensor_distance",
+                    "concept": "distance reading",
+                    "visual": "gauge reads value",
+                },
+            },
+        )
+        source = "name test\nseed sensor.distance with 25"
+        canonical, rewrites = pack.preprocess_with_map(source)
+        spans = align_poem(canonical, target="python", rewrites=rewrites)
+        output = align_to_json(spans)
+        data = _json.loads(output)
+        domain_entries = [e for e in data if "domain_original" in e]
+        assert len(domain_entries) >= 1
+        assert domain_entries[0]["domain_concept"] == "distance reading"
+
+    def test_json_no_domain_fields_without_provenance(self):
+        """to_json omits domain fields when no domain provenance."""
+        import json as _json
+        spans = align_poem("name test\nseed x with 1", target="python")
+        output = align_to_json(spans)
+        data = _json.loads(output)
+        for entry in data:
+            assert "domain_original" not in entry

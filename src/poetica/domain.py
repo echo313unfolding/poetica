@@ -19,6 +19,22 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass
+class DomainRewrite:
+    """Provenance record for a single domain rewrite.
+
+    Preserves the learner's original phrase alongside the canonical form,
+    so the lesson layer can show both the field language and the code language.
+    """
+    line_num: int
+    original_text: str
+    canonical_text: str
+    domain: str
+    domain_concept: str
+    domain_visual: str
+    rewrite_type: str  # "term", "phrase", or "none"
+
+
+@dataclass
 class DomainPack:
     """A loaded domain pack."""
     name: str
@@ -67,6 +83,28 @@ class DomainPack:
             lines.append(indent + rewritten)
         return '\n'.join(lines)
 
+    def preprocess_with_map(self, source: str) -> tuple:
+        """Rewrite domain source and return (canonical_source, rewrite_map).
+
+        Returns:
+            (canonical_source, list[DomainRewrite])
+        """
+        lines = []
+        rewrites = []
+        line_num = 0
+        for line in source.split('\n'):
+            line_num += 1
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                lines.append(line)
+                continue
+            indent = line[:len(line) - len(line.lstrip())]
+            rewritten, rewrite_record = self._rewrite_line_with_provenance(stripped, line_num)
+            lines.append(indent + rewritten)
+            if rewrite_record:
+                rewrites.append(rewrite_record)
+        return '\n'.join(lines), rewrites
+
     def _rewrite_line(self, line: str) -> str:
         """Rewrite a single line: term substitution then phrase matching."""
         # Term substitution
@@ -74,6 +112,49 @@ class DomainPack:
         # Phrase rewriting
         result = self._rewrite_phrase(result)
         return result
+
+    def _rewrite_line_with_provenance(self, line: str, line_num: int) -> tuple:
+        """Rewrite a line and return (rewritten, DomainRewrite or None)."""
+        original = line
+
+        # Try phrase rewriting first (on the raw line before term sub)
+        phrase_result, phrase_info = self._rewrite_phrase_with_info(line)
+        if phrase_info is not None:
+            # Phrase matched — also apply term substitution to the result
+            canonical = self._substitute_terms(phrase_result)
+            return canonical, DomainRewrite(
+                line_num=line_num,
+                original_text=original,
+                canonical_text=canonical,
+                domain=self.domain,
+                domain_concept=phrase_info.get("concept", ""),
+                domain_visual=phrase_info.get("visual", ""),
+                rewrite_type="phrase",
+            )
+
+        # Try term substitution
+        result = self._substitute_terms(line)
+        if result != line:
+            # Find which terms were substituted to get concept/visual
+            concept = ""
+            visual = ""
+            sorted_terms = sorted(self.terms.items(), key=lambda x: len(x[0]), reverse=True)
+            for term, info in sorted_terms:
+                if term in line:
+                    concept = concept or info.get("concept", "")
+                    visual = visual or info.get("visual", "")
+            return result, DomainRewrite(
+                line_num=line_num,
+                original_text=original,
+                canonical_text=result,
+                domain=self.domain,
+                domain_concept=concept,
+                domain_visual=visual,
+                rewrite_type="term",
+            )
+
+        # No rewrite
+        return line, None
 
     def _substitute_terms(self, line: str) -> str:
         """Replace domain terms with their canonical forms."""
@@ -87,14 +168,26 @@ class DomainPack:
 
     def _rewrite_phrase(self, line: str) -> str:
         """Try to match a domain phrase and rewrite to canonical Poetica."""
+        result, _ = self._rewrite_phrase_with_info(line)
+        return result
+
+    def _rewrite_phrase_with_info(self, line: str) -> tuple:
+        """Try to match a domain phrase. Returns (rewritten, info_dict or None)."""
         for regex, canonical, placeholders, info in self._phrase_rules:
             m = regex.match(line)
             if m:
                 result = canonical
                 for ph in placeholders:
                     result = result.replace(f'{{{ph}}}', m.group(ph))
-                return result
-        return line
+                # Fill visual template placeholders too
+                filled_info = dict(info)
+                visual = filled_info.get("visual", "")
+                if visual:
+                    for ph in placeholders:
+                        visual = visual.replace(f'{{{ph}}}', m.group(ph))
+                    filled_info["visual"] = visual
+                return result, filled_info
+        return line, None
 
     def get_visual(self, op_name: str) -> Optional[str]:
         """Get domain-specific visual description for an op, if defined."""

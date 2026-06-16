@@ -23,17 +23,22 @@ from poetica.canvas import visualize_poem, visualize_command, to_mermaid, to_jso
 from poetica.visual import list_worlds
 from poetica.playground import play_poem, render_playback
 from poetica.alignment import align_poem, to_table, to_annotated, to_lesson, to_json as align_to_json
-from poetica.domain import load_domain, find_domain, list_domains
+from poetica.domain import load_domain, find_domain, list_domains, DomainRewrite
 
 
-def _load_source(args) -> str:
-    """Read source from file/stdin and apply domain preprocessing if --domain is set."""
+def _load_source(args, with_map=False):
+    """Read source from file/stdin and apply domain preprocessing if --domain is set.
+
+    If with_map=True, returns (source, rewrites) where rewrites is a list of
+    DomainRewrite provenance records (empty list if no domain).
+    """
     if args.file == '-':
         source = sys.stdin.read()
     else:
         with open(args.file, 'r') as f:
             source = f.read()
 
+    rewrites = []
     domain = getattr(args, 'domain', None)
     if domain:
         path = find_domain(domain)
@@ -41,7 +46,13 @@ def _load_source(args) -> str:
             print(f"Unknown domain: {domain}. Available: {', '.join(list_domains())}", file=sys.stderr)
             sys.exit(1)
         pack = load_domain(path)
-        source = pack.preprocess(source)
+        if with_map:
+            source, rewrites = pack.preprocess_with_map(source)
+        else:
+            source = pack.preprocess(source)
+
+    if with_map:
+        return source, rewrites
     return source
 
 
@@ -162,10 +173,10 @@ def cmd_play(args):
 
 def cmd_align(args):
     """Show alignment map: source phrases -> target code."""
-    source = _load_source(args)
+    source, rewrites = _load_source(args, with_map=True)
 
     target = args.type or "python"
-    spans = align_poem(source, target=target)
+    spans = align_poem(source, target=target, rewrites=rewrites)
 
     fmt = args.format
     if fmt == "table":
