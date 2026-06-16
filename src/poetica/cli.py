@@ -9,6 +9,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 
 from poetica import compile_poem, __version__
@@ -24,6 +25,10 @@ from poetica.visual import list_worlds
 from poetica.playground import play_poem, render_playback
 from poetica.alignment import align_poem, to_table, to_annotated, to_lesson, to_json as align_to_json
 from poetica.domain import load_domain, find_domain, list_domains, DomainRewrite
+from poetica.curriculum import (
+    load_curriculum, find_curriculum, list_curricula,
+    inspect_curriculum, map_curriculum, generate_lesson, generate_evidence_json,
+)
 
 
 def _load_source(args, with_map=False):
@@ -210,6 +215,82 @@ def cmd_check(args):
         print(f"OK: {len(decisions)} ops, all allowed at L{args.level}")
 
 
+def cmd_curriculum(args):
+    """Curriculum pack commands."""
+    action = args.curriculum_action
+
+    if action == "list":
+        names = list_curricula()
+        if not names:
+            print("No curricula found.")
+            return
+        for name in names:
+            print(f"  {name}")
+
+    elif action == "inspect":
+        pack = _load_curriculum(args.file)
+        print(inspect_curriculum(pack))
+
+    elif action == "map":
+        pack = _load_curriculum(args.file)
+        print(map_curriculum(pack))
+
+    elif action == "lesson":
+        pack = _load_curriculum_by_name_or_file(args.curriculum_ref)
+        lessons = pack.get_lessons_for_concept(args.concept)
+        if not lessons:
+            print(f"No lessons found for concept '{args.concept}'", file=sys.stderr)
+            sys.exit(1)
+        domain = getattr(args, 'domain', None) or pack.domain
+        for i, lesson in enumerate(lessons):
+            if i > 0:
+                print("\n---\n")
+            fmt = args.format
+            if fmt == "lesson":
+                print(generate_lesson(lesson, domain_name=domain))
+            elif fmt == "json":
+                print(generate_evidence_json(
+                    lesson, curriculum_name=pack.curriculum,
+                    concept_id=args.concept,
+                ))
+
+    elif action == "evidence":
+        pack = _load_curriculum_by_name_or_file(args.curriculum_ref)
+        lessons = pack.get_lessons_for_concept(args.concept)
+        if not lessons:
+            print(f"No lessons found for concept '{args.concept}'", file=sys.stderr)
+            sys.exit(1)
+        for i, lesson in enumerate(lessons):
+            if i > 0:
+                print("\n---\n")
+            print(generate_evidence_json(
+                lesson, curriculum_name=pack.curriculum,
+                concept_id=args.concept,
+            ))
+
+
+def _load_curriculum(path):
+    """Load curriculum from a file path."""
+    try:
+        return load_curriculum(path)
+    except FileNotFoundError:
+        print(f"File not found: {path}", file=sys.stderr)
+        sys.exit(1)
+
+
+def _load_curriculum_by_name_or_file(ref):
+    """Load curriculum by built-in name or file path."""
+    # Try as built-in name first
+    path = find_curriculum(ref)
+    if path:
+        return load_curriculum(path)
+    # Try as file path
+    if os.path.exists(ref):
+        return load_curriculum(ref)
+    print(f"Curriculum not found: {ref}. Available: {', '.join(list_curricula())}", file=sys.stderr)
+    sys.exit(1)
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="poetica",
@@ -286,6 +367,34 @@ def main():
     cmd.add_argument("--yes", "-y", action="store_true",
                      help="Auto-confirm for apt commands")
     cmd.set_defaults(func=cmd_nl)
+
+    # curriculum
+    cur = sub.add_parser("curriculum", help="Curriculum pack commands")
+    cur_sub = cur.add_subparsers(dest="curriculum_action")
+
+    cur_list = cur_sub.add_parser("list", help="List available curricula")
+
+    cur_inspect = cur_sub.add_parser("inspect", help="Inspect a curriculum pack")
+    cur_inspect.add_argument("file", help="Path to curriculum YAML/JSON")
+
+    cur_map = cur_sub.add_parser("map", help="Show concept → ops → domain mapping")
+    cur_map.add_argument("file", help="Path to curriculum YAML/JSON")
+    cur_map.add_argument("--domain", "-d", help="Domain pack override")
+
+    cur_lesson = cur_sub.add_parser("lesson", help="Generate a lesson for a concept")
+    cur_lesson.add_argument("curriculum_ref", help="Curriculum name or path")
+    cur_lesson.add_argument("concept", help="Concept ID")
+    cur_lesson.add_argument("--format", "-f", choices=["lesson", "json"],
+                            default="lesson", help="Output format (default: lesson)")
+    cur_lesson.add_argument("--domain", "-d", help="Domain pack override")
+
+    cur_evidence = cur_sub.add_parser("evidence", help="Generate evidence schema for a concept")
+    cur_evidence.add_argument("curriculum_ref", help="Curriculum name or path")
+    cur_evidence.add_argument("concept", help="Concept ID")
+    cur_evidence.add_argument("--format", "-f", choices=["json"],
+                              default="json", help="Output format (default: json)")
+
+    cur.set_defaults(func=cmd_curriculum)
 
     args = p.parse_args()
     if not args.command:

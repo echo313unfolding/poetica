@@ -1,0 +1,258 @@
+curriculum: k8_stem_progression
+grade_band: K-8
+subject: STEM Computing Progression
+description: >
+  A vertical K-8 progression through computing concepts using Poetica.
+  K-2: See it, move it, name it (concrete models).
+  3-5: Phrase it, modify it, explain it (variables, conditions, data).
+  6-8: Code it, debug it, transfer it (Python/JS, domain packs, data analysis).
+standard_source: CSTA
+target_languages:
+  - python
+
+units:
+  # --- K-2 Band: See it / Move it / Name it ---
+
+  - title: "K-2: Cause and Effect"
+    standards:
+      - CSTA-1A-AP-08
+      - NGSS-K-2-ETS1-2
+    concepts:
+      - id: cause_effect
+        label: Cause and Effect
+        poetica_ops: [seed, emit]
+        description: >
+          One thing makes another thing happen.
+          Press the button, the light turns on.
+
+    poetica_ops: [seed, emit]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name light_switch
+          seed light with "off"
+          emit light
+        concept: cause_effect
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can say what the program does
+          - student can change "off" to "on" and predict the result
+
+  - title: "K-2: Naming Things"
+    standards:
+      - CSTA-1A-AP-09
+    concepts:
+      - id: naming
+        label: Naming Things
+        poetica_ops: [seed, emit]
+        description: >
+          Everything has a name. Names let us talk about things.
+          "seed color with blue" gives the name "color" to the value "blue".
+
+    poetica_ops: [seed, emit]
+    visual_worlds: [garden]
+
+    lessons:
+      - phrase: |
+          name my_garden
+          seed color with "red"
+          seed size with "big"
+          emit color
+          emit size
+        concept: naming
+        target_languages: [python]
+        visual_world: garden
+        evidence:
+          - student can point to which name holds which value
+          - student can add a new seed line with their own name
+
+  # --- 3-5 Band: Phrase it / Modify it / Explain it ---
+
+  - title: "3-5: Variables Store Values"
+    standards:
+      - CSTA-1B-AP-10
+    concepts:
+      - id: variable_storage
+        label: Variables Store Values
+        poetica_ops: [seed, emit, flow]
+        description: >
+          A variable is a named container. You put a value in it.
+          You can look at it or change it later.
+
+    poetica_ops: [seed, emit, flow]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name score_tracker
+          seed score with 0
+          emit score
+          flow 10 into score
+          emit score
+        concept: variable_storage
+        target_languages: [python]
+        evidence:
+          - student can explain what score holds at each step
+          - student can predict both emit outputs
+
+  - title: "3-5: Decisions"
+    standards:
+      - CSTA-1B-AP-12
+    concepts:
+      - id: decision
+        label: Making Decisions
+        poetica_ops: [seed, when, emit]
+        description: >
+          The program checks something and chooses a path.
+          Like a fork in the road.
+
+    poetica_ops: [seed, when, emit]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name weather_check
+          seed temperature with 30
+          when temperature > 25:
+              emit "hot"
+          else:
+              emit "cool"
+        concept: decision
+        target_languages: [python]
+        evidence:
+          - student can trace which path runs
+          - student can change temperature and predict the new output
+
+  - title: "3-5: Loops and Collections"
+    standards:
+      - CSTA-1B-AP-11
+    concepts:
+      - id: loop_collection
+        label: Loops and Collections
+        poetica_ops: [seed, for, emit, grow]
+        description: >
+          A loop visits each item in a collection, one by one.
+          Like reading every name on a list.
+
+    poetica_ops: [seed, for, emit, grow]
+    visual_worlds: [garden]
+
+    lessons:
+      - phrase: |
+          name plant_list
+          seed plants with ["rose", "daisy", "fern"]
+          for plant in plants:
+              emit plant
+        concept: loop_collection
+        target_languages: [python]
+        visual_world: garden
+        evidence:
+          - student can predict the three outputs
+          - student can add a fourth plant and predict the result
+
+  # --- 6-8 Band: Code it / Debug it / Transfer it ---
+
+  - title: "6-8: Data and Transform"
+    standards:
+      - CSTA-2-AP-11
+      - CSTA-2-DA-08
+    concepts:
+      - id: data_transform
+        label: Data and Transform
+        poetica_ops: [seed, grow, pack, emit]
+        description: >
+          Collect data, transform it, output the result.
+          Real programs process information, not just print it.
+
+    poetica_ops: [seed, grow, pack, emit]
+    visual_worlds: [filesystem]
+
+    lessons:
+      - phrase: |
+          name data_pipeline
+          seed readings with []
+          grow readings from 23
+          grow readings from 25
+          grow readings from 22
+          pack readings as json
+          emit readings
+        concept: data_transform
+        target_languages: [python, javascript]
+        visual_world: filesystem
+        evidence:
+          - student can explain what the collection contains at each step
+          - student can modify the data and predict the packed output
+          - student can transfer the same pattern to a different dataset
+
+  - title: "6-8: Domain Transfer"
+    standards:
+      - CSTA-2-AP-13
+      - CSTA-2-AP-17
+    concepts:
+      - id: domain_transfer
+        label: Domain Transfer
+        poetica_ops: [seed, when, emit, remember]
+        description: >
+          The same computing pattern applies across domains.
+          A sensor check in robotics is the same structure as a
+          temperature check in biology or a price check in finance.
+
+    poetica_ops: [seed, when, emit, remember]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name sensor_check
+          seed sensor.distance with 25
+          when sensor.distance < 10:
+              stop motor
+              emit "obstacle detected"
+          else:
+              emit "path clear"
+        concept: domain_transfer
+        domain: robotics
+        target_languages: [python, javascript]
+        visual_world: robot_grid
+        evidence:
+          - student can explain the pattern (input → check → action)
+          - student can write the same pattern for a different domain
+          - student can identify this pattern in existing Python code
+
+  - title: "6-8: Debugging and Testing"
+    standards:
+      - CSTA-2-AP-17
+    concepts:
+      - id: debugging
+        label: Debugging
+        poetica_ops: [seed, when, emit, bloom]
+        description: >
+          Programs have bugs. Finding and fixing them is a skill.
+          Read the program, predict the output, compare to actual,
+          find the difference.
+
+    poetica_ops: [seed, when, emit, bloom]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name buggy_robot
+          seed sensor.distance with 5
+          when sensor.distance > 10:
+              stop motor
+              emit "stopping"
+          else:
+              emit "path clear"
+          bloom "done"
+        concept: debugging
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        notes: >
+          Bug: the comparison is backwards. Robot says "path clear"
+          when distance is 5 (should stop). Student must find and fix it.
+        evidence:
+          - student can identify the bug
+          - student can explain why the output is wrong
+          - student can fix the comparison operator

@@ -29,6 +29,12 @@ from poetica.alignment import (
 from poetica.domain import (
     DomainPack, load_domain, find_domain, list_domains,
 )
+from poetica.curriculum import (
+    CurriculumPack, Unit, Lesson, CurriculumConcept, StandardLink, EvidenceItem,
+    load_curriculum, find_curriculum, list_curricula,
+    inspect_curriculum, map_curriculum, generate_lesson, generate_evidence_json,
+    KNOWN_OPS,
+)
 
 
 # --- Parser ---
@@ -1580,3 +1586,266 @@ class TestDomainPacks:
         data = _json.loads(output)
         for entry in data:
             assert "domain_original" not in entry
+
+
+# --- Curriculum Mapper ---
+
+class TestCurriculum:
+    def _read_curriculum(self, name):
+        import pathlib
+        path = pathlib.Path(__file__).parent.parent / "examples" / "curricula" / name
+        return str(path)
+
+    def test_list_curricula(self):
+        names = list_curricula()
+        assert "grade5_robotics" in names
+        assert "k8_stem_progression" in names
+
+    def test_find_curriculum(self):
+        path = find_curriculum("grade5_robotics")
+        assert path is not None
+        assert path.endswith(".yaml")
+
+    def test_find_curriculum_missing(self):
+        path = find_curriculum("nonexistent_curriculum")
+        assert path is None
+
+    def test_load_grade5_robotics(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        assert pack.curriculum == "grade5_robotics_intro"
+        assert pack.grade_band == "3-5"
+        assert pack.domain == "robotics"
+        assert len(pack.units) >= 3
+
+    def test_load_k8_progression(self):
+        path = find_curriculum("k8_stem_progression")
+        pack = load_curriculum(path)
+        assert pack.curriculum == "k8_stem_progression"
+        assert pack.grade_band == "K-8"
+        assert len(pack.units) >= 5
+
+    def test_unit_listing(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        titles = pack.list_units()
+        assert "Inputs and Outputs" in titles
+        assert "Conditions and Actions" in titles
+
+    def test_get_unit(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        unit = pack.get_unit("Inputs and Outputs")
+        assert unit is not None
+        assert unit.title == "Inputs and Outputs"
+
+    def test_get_unit_missing(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        assert pack.get_unit("Nonexistent Unit") is None
+
+    def test_unit_standards(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        unit = pack.get_unit("Conditions and Actions")
+        assert len(unit.standards) >= 1
+        std_ids = [s.standard_id for s in unit.standards]
+        assert any("CSTA" in s for s in std_ids)
+
+    def test_unit_concepts(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        unit = pack.get_unit("Conditions and Actions")
+        concept_ids = [c.concept_id for c in unit.concepts]
+        assert "input_condition_action" in concept_ids
+
+    def test_concept_has_ops(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        concept = pack.get_concept("input_condition_action")
+        assert concept is not None
+        assert "seed" in concept.poetica_ops
+        assert "when" in concept.poetica_ops
+
+    def test_get_concept_missing(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        assert pack.get_concept("nonexistent") is None
+
+    def test_list_all_concepts(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        concepts = pack.list_concepts()
+        ids = [c.concept_id for c in concepts]
+        assert "input_output" in ids
+        assert "input_condition_action" in ids
+
+    def test_lessons_for_concept(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        lessons = pack.get_lessons_for_concept("input_condition_action")
+        assert len(lessons) >= 1
+        assert lessons[0].domain == "robotics"
+
+    def test_lessons_for_concept_missing(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        lessons = pack.get_lessons_for_concept("nonexistent")
+        assert len(lessons) == 0
+
+    def test_lesson_has_evidence(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        lessons = pack.get_lessons_for_concept("input_condition_action")
+        assert len(lessons) >= 1
+        assert len(lessons[0].evidence) >= 1
+        assert "threshold" in lessons[0].evidence[1].description.lower() or \
+               "modify" in lessons[0].evidence[1].description.lower()
+
+    def test_lesson_has_visual_world(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        lessons = pack.get_lessons_for_concept("input_condition_action")
+        assert lessons[0].visual_world == "robot_grid"
+
+    def test_lesson_target_languages(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        lessons = pack.get_lessons_for_concept("input_condition_action")
+        assert "python" in lessons[0].target_languages
+
+    def test_all_ops_known(self):
+        """All Poetica ops in curricula must be known ops."""
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        all_ops = pack.all_ops()
+        for op in all_ops:
+            assert op in KNOWN_OPS, f"Unknown op: {op}"
+
+    def test_validate_grade5(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        errors = pack.validate()
+        assert len(errors) == 0, f"Validation errors: {errors}"
+
+    def test_validate_k8(self):
+        path = find_curriculum("k8_stem_progression")
+        pack = load_curriculum(path)
+        errors = pack.validate()
+        assert len(errors) == 0, f"Validation errors: {errors}"
+
+    def test_validate_missing_name(self):
+        pack = CurriculumPack(curriculum="", grade_band="3-5",
+                              units=[Unit(title="test")])
+        errors = pack.validate()
+        assert any("curriculum name" in e for e in errors)
+
+    def test_validate_missing_grade(self):
+        pack = CurriculumPack(curriculum="test", grade_band="",
+                              units=[Unit(title="test")])
+        errors = pack.validate()
+        assert any("grade_band" in e for e in errors)
+
+    def test_validate_no_units(self):
+        pack = CurriculumPack(curriculum="test", grade_band="3-5")
+        errors = pack.validate()
+        assert any("unit" in e for e in errors)
+
+    def test_validate_unknown_op(self):
+        pack = CurriculumPack(
+            curriculum="test", grade_band="3-5",
+            units=[Unit(title="test", poetica_ops=["seed", "teleport"])],
+        )
+        errors = pack.validate()
+        assert any("teleport" in e for e in errors)
+
+    def test_validate_unknown_world(self):
+        pack = CurriculumPack(
+            curriculum="test", grade_band="3-5",
+            units=[Unit(title="test", visual_worlds=["robot_grid", "mars_colony"])],
+        )
+        errors = pack.validate()
+        assert any("mars_colony" in e for e in errors)
+
+    def test_validate_unknown_domain(self):
+        pack = CurriculumPack(
+            curriculum="test", grade_band="3-5", domain="alchemy",
+            units=[Unit(title="test")],
+        )
+        errors = pack.validate()
+        assert any("alchemy" in e for e in errors)
+
+    def test_inspect_output(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        output = inspect_curriculum(pack)
+        assert "grade5_robotics_intro" in output
+        assert "3-5" in output
+        assert "robotics" in output
+        assert "Inputs and Outputs" in output
+        assert "Validation: OK" in output
+
+    def test_map_output(self):
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        output = map_curriculum(pack)
+        assert "input_condition_action" in output
+        assert "robotics" in output
+
+    def test_generate_lesson(self):
+        lesson = Lesson(
+            phrase="name test\nseed x with 42\nemit x",
+            concept_id="variable",
+            target_languages=["python"],
+        )
+        output = generate_lesson(lesson)
+        assert "Visual:" in output
+        assert "Phrase:" in output
+        assert "Code:" in output
+
+    def test_generate_lesson_with_domain(self):
+        lesson = Lesson(
+            phrase="name test\nseed sensor.distance with 25\nemit sensor.distance",
+            concept_id="input_output",
+            domain="robotics",
+            target_languages=["python"],
+        )
+        output = generate_lesson(lesson, domain_name="robotics")
+        # Should have domain provenance (Original/Canonical) for rewritten lines
+        assert "sensor_distance" in output
+
+    def test_generate_evidence_json(self):
+        import json as _json
+        lesson = Lesson(
+            phrase="name test\nseed x with 1",
+            concept_id="variable",
+            evidence=[
+                EvidenceItem(description="student can explain the variable"),
+                EvidenceItem(description="student can change the value", evidence_type="modification"),
+            ],
+        )
+        output = generate_evidence_json(lesson, curriculum_name="test_cur", concept_id="variable")
+        data = _json.loads(output)
+        assert data["curriculum"] == "test_cur"
+        assert data["concept"] == "variable"
+        assert len(data["evidence_criteria"]) == 2
+        assert data["evidence_criteria"][0]["met"] is None
+        assert data["evidence_criteria"][1]["type"] == "modification"
+
+    def test_curriculum_from_grade5_lesson_generates(self):
+        """Full pipeline: load curriculum → get lesson → generate output."""
+        path = find_curriculum("grade5_robotics")
+        pack = load_curriculum(path)
+        lessons = pack.get_lessons_for_concept("input_condition_action")
+        assert len(lessons) >= 1
+        output = generate_lesson(lessons[0], domain_name=pack.domain)
+        # Should produce alignment lesson with code
+        assert len(output) > 0
+        # Should contain Python code
+        assert "Code:" in output or "Canonical:" in output
+
+    def test_existing_tests_unbroken(self):
+        """Canary: existing compile still works after curriculum additions."""
+        code = compile_poem("name test\nseed x with 1\nemit x", target="python")
+        assert "x = 1" in code
+        assert "print" in code

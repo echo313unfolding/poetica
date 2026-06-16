@@ -1,0 +1,195 @@
+curriculum: grade5_robotics_intro
+grade_band: "3-5"
+subject: Robotics / Intro Computing
+description: >
+  Introduction to computing through robotics. Students learn how sensors
+  detect the environment, conditions trigger actions, and variables store
+  state. Visual-first: see the robot move, then describe what happened,
+  then map to code.
+standard_source: CSTA
+domain: robotics
+target_languages:
+  - python
+  - javascript
+
+units:
+  - title: Inputs and Outputs
+    standards:
+      - CSTA-1B-AP-10
+      - NGSS-3-5-ETS1-1
+    concepts:
+      - id: input_output
+        label: Input and Output
+        poetica_ops: [seed, emit]
+        description: >
+          Values go in (seed), results come out (emit).
+          Every program has inputs and outputs.
+
+    poetica_ops: [seed, emit]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name sensor_demo
+          seed sensor.distance with 25
+          emit sensor.distance
+        concept: input_output
+        domain: robotics
+        target_languages: [python, javascript]
+        visual_world: robot_grid
+        evidence:
+          - student can identify the input value
+          - student can identify the output
+          - student can change the input and predict the output
+
+    evidence:
+      - student can explain what goes in and what comes out
+
+  - title: Conditions and Actions
+    standards:
+      - CSTA-1B-AP-12
+      - NGSS-3-5-ETS1-2
+    concepts:
+      - id: input_condition_action
+        label: Input → Condition → Action
+        poetica_ops: [seed, when, emit, flow]
+        description: >
+          A sensor reads a value. A condition checks it.
+          An action happens based on the check.
+
+      - id: threshold
+        label: Threshold
+        poetica_ops: [seed, when]
+        description: >
+          A threshold is the number that decides the boundary.
+          Below 10? Stop. Above 10? Keep going.
+
+    poetica_ops: [seed, when, emit, flow]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name sensor_check
+          seed sensor.distance with 25
+          when sensor.distance < 10:
+              stop motor
+              emit "obstacle detected"
+          else:
+              emit "path clear"
+        concept: input_condition_action
+        domain: robotics
+        target_languages: [python, javascript]
+        visual_world: robot_grid
+        evidence:
+          - student can explain input → condition → action
+          - student can modify the threshold
+          - student can debug a wrong comparison
+
+      - phrase: |
+          name threshold_demo
+          seed sensor.distance with 5
+          when sensor.distance < 10:
+              emit "too close"
+          else:
+              emit "safe"
+        concept: threshold
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can explain what the threshold does
+          - student can change 10 to a different number and predict behavior
+
+    evidence:
+      - student can trace the path through a condition
+      - student can explain why the robot stops or continues
+
+  - title: Variables and State
+    standards:
+      - CSTA-1B-AP-10
+      - CSTA-1B-AP-11
+    concepts:
+      - id: variable_as_container
+        label: Variable as Container
+        poetica_ops: [seed, emit, flow]
+        description: >
+          A variable is a named box that holds a value.
+          You can put something in, look at it, or change it.
+
+      - id: state_change
+        label: State Change
+        poetica_ops: [seed, flow, emit]
+        description: >
+          The robot's state changes over time.
+          Speed goes from 100 to 0 when it stops.
+
+    poetica_ops: [seed, flow, emit]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name speed_control
+          seed motor.speed with 100
+          emit motor.speed
+          stop motor
+          emit motor.speed
+        concept: variable_as_container
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can name what the variable holds
+          - student can predict the two emit outputs (100, then 0)
+
+      - phrase: |
+          name state_demo
+          seed motor.speed with 50
+          seed sensor.distance with 30
+          when sensor.distance < 10:
+              stop motor
+          emit motor.speed
+        concept: state_change
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can explain why motor.speed is still 50
+          - student can change sensor.distance to 5 and predict the new output
+
+    evidence:
+      - student can explain that a variable name refers to a stored value
+      - student can trace how a value changes through the program
+
+  - title: Sequences and Order
+    standards:
+      - CSTA-1B-AP-10
+    concepts:
+      - id: sequence
+        label: Sequence
+        poetica_ops: [seed, emit, flow]
+        description: >
+          Programs run top to bottom, one step at a time.
+          The order matters.
+
+    poetica_ops: [seed, emit, flow]
+    visual_worlds: [robot_grid]
+
+    lessons:
+      - phrase: |
+          name sequence_demo
+          seed motor.speed with 100
+          emit "moving"
+          stop motor
+          emit "stopped"
+          bloom "done"
+        concept: sequence
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can predict output order
+          - student can explain what happens if lines are reordered
+          - student can add a new step in the right position
+
+    evidence:
+      - student understands that order determines behavior
