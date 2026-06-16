@@ -19,6 +19,7 @@ from poetica.receipt import Receipt
 from poetica.emitters import get_emitter, list_targets
 from poetica.cmd import run_cmd
 from poetica.intent import IntentError
+from poetica.canvas import visualize_poem, visualize_command, to_mermaid, to_json_graph, to_ascii
 
 
 def cmd_compile(args):
@@ -89,6 +90,45 @@ def cmd_nl(args):
             sys.exit(1)
 
 
+def cmd_visualize(args):
+    """Visualize a poem as a concept diagram."""
+    if args.file == '-':
+        source = sys.stdin.read()
+    else:
+        with open(args.file, 'r') as f:
+            source = f.read()
+
+    nodes = visualize_poem(source, level=args.level)
+
+    # Extract program name from source
+    name = "program"
+    for line in source.split('\n'):
+        stripped = line.strip()
+        if stripped.startswith("name "):
+            name = stripped[5:].strip()
+            break
+
+    fmt = args.format
+    if fmt == "mermaid":
+        print(to_mermaid(nodes, name))
+    elif fmt == "json":
+        print(to_json_graph(nodes, name))
+    elif fmt == "ascii":
+        print(to_ascii(nodes, name))
+
+
+def cmd_explain_command(args):
+    """Visualize what a shell command does."""
+    nodes = visualize_command(args.command)
+    fmt = args.format
+    if fmt == "mermaid":
+        print(to_mermaid(nodes, args.command))
+    elif fmt == "json":
+        print(to_json_graph(nodes, args.command))
+    elif fmt == "ascii":
+        print(to_ascii(nodes, args.command))
+
+
 def cmd_check(args):
     """Dry-run: parse and gate-check without generating code."""
     if args.file == '-':
@@ -141,6 +181,22 @@ def main():
     chk.add_argument("file", help="Path to .poem file (or - for stdin)")
     chk.add_argument("--level", "-l", type=int, default=1, help="Capability level 1-5 (default: 1)")
     chk.set_defaults(func=cmd_check)
+
+    # visualize
+    viz = sub.add_parser("visualize", help="Visualize a poem as a concept diagram")
+    viz.add_argument("file", help="Path to .poem file (or - for stdin)")
+    viz.add_argument("--format", "-f", choices=["mermaid", "json", "ascii"],
+                     default="ascii", help="Output format (default: ascii)")
+    viz.add_argument("--level", "-l", type=int, default=5,
+                     help="Gate level for annotation (default: 5)")
+    viz.set_defaults(func=cmd_visualize)
+
+    # explain-command
+    exc = sub.add_parser("explain-command", help="Visualize what a shell command does")
+    exc.add_argument("command", help="Shell command to explain (e.g. 'ls -la')")
+    exc.add_argument("--format", "-f", choices=["mermaid", "json", "ascii"],
+                     default="ascii", help="Output format (default: ascii)")
+    exc.set_defaults(func=cmd_explain_command)
 
     # cmd
     cmd = sub.add_parser("cmd", help="NL to gated shell command")

@@ -13,6 +13,10 @@ from poetica.receipt import Receipt
 from poetica.emitters import get_emitter, list_targets
 from poetica.intent import Intent, IntentError, parse_intent
 from poetica.cmd import CmdReceipt, run_cmd
+from poetica.canvas import (
+    visualize_poem, visualize_command, to_mermaid, to_json_graph, to_ascii,
+    VisualNode,
+)
 
 
 # --- Parser ---
@@ -729,3 +733,139 @@ class TestCmd:
     def test_unknown_intent_raises(self):
         with pytest.raises(IntentError):
             run_cmd("do something weird", level=1)
+
+
+# --- Echo Canvas ---
+
+class TestCanvas:
+    def _read_example(self, name):
+        import pathlib
+        path = pathlib.Path(__file__).parent.parent / "examples" / name
+        return path.read_text()
+
+    def test_fizzbuzz_has_loop_and_decisions(self):
+        source = self._read_example("fizzbuzz.poem")
+        nodes = visualize_poem(source)
+        ops = [n.ir_op for n in nodes]
+        assert "for" in ops
+        assert "if" in ops or "else_when" in ops
+        assert "emit" in ops
+        concepts = [n.concept for n in nodes]
+        assert "loop" in concepts
+        assert "decision" in concepts
+        assert "output" in concepts
+
+    def test_hello_has_seed_and_emit(self):
+        source = self._read_example("hello.poem")
+        nodes = visualize_poem(source)
+        ops = [n.ir_op for n in nodes]
+        assert "seed" in ops
+        assert "emit" in ops
+        concepts = [n.concept for n in nodes]
+        assert "variable" in concepts
+        assert "output" in concepts
+
+    def test_garden_has_grow_and_pack(self):
+        source = self._read_example("garden.poem")
+        nodes = visualize_poem(source)
+        ops = [n.ir_op for n in nodes]
+        assert "grow" in ops
+        assert "pack" in ops
+
+    def test_pipeline_has_lift(self):
+        source = self._read_example("pipeline.poem")
+        nodes = visualize_poem(source)
+        ops = [n.ir_op for n in nodes]
+        assert "lift" in ops
+        # lift requires L4
+        lift_nodes = [n for n in nodes if n.ir_op == "lift"]
+        assert lift_nodes[0].gate_level == 4
+
+    def test_command_ls_visual(self):
+        nodes = visualize_command("ls -la")
+        assert len(nodes) == 1
+        assert nodes[0].concept == "folder_list"
+        assert nodes[0].explanation == "List files in a directory"
+
+    def test_command_pwd_visual(self):
+        nodes = visualize_command("pwd")
+        assert len(nodes) == 1
+        assert nodes[0].concept == "location"
+
+    def test_command_apt_update_visual(self):
+        nodes = visualize_command("apt update")
+        assert len(nodes) == 1
+        assert nodes[0].concept == "package_refresh"
+        assert nodes[0].gate_level == 4
+
+    def test_command_unknown_fallback(self):
+        nodes = visualize_command("docker ps")
+        assert len(nodes) == 1
+        assert nodes[0].concept == "command"
+
+    def test_json_graph_validates(self):
+        source = self._read_example("hello.poem")
+        nodes = visualize_poem(source)
+        output = to_json_graph(nodes, "greeter")
+        graph = json.loads(output)
+        assert graph["name"] == "greeter"
+        assert len(graph["nodes"]) > 0
+        assert len(graph["edges"]) > 0
+        # Each node has required fields
+        for node in graph["nodes"]:
+            assert "id" in node
+            assert "source_line" in node
+            assert "source_text" in node
+            assert "ir_op" in node
+            assert "concept" in node
+            assert "explanation" in node
+            assert "gate_level" in node
+
+    def test_mermaid_contains_flowchart(self):
+        source = self._read_example("hello.poem")
+        nodes = visualize_poem(source)
+        output = to_mermaid(nodes, "greeter")
+        assert "flowchart TD" in output
+        assert "start" in output
+        assert "finish" in output
+
+    def test_mermaid_fizzbuzz_has_decision(self):
+        source = self._read_example("fizzbuzz.poem")
+        nodes = visualize_poem(source)
+        output = to_mermaid(nodes, "fizzbuzz")
+        assert "flowchart TD" in output
+        # Decisions use {curly brace} syntax in mermaid
+        assert "{" in output
+
+    def test_ascii_output_readable(self):
+        source = self._read_example("hello.poem")
+        nodes = visualize_poem(source)
+        output = to_ascii(nodes, "greeter")
+        assert "START: greeter" in output
+        assert "END" in output
+        assert "[=]" in output  # seed icon
+
+    def test_node_has_source_line(self):
+        source = self._read_example("hello.poem")
+        nodes = visualize_poem(source)
+        for node in nodes:
+            assert node.source_line > 0
+
+    def test_node_to_dict(self):
+        node = VisualNode(
+            id="n0", source_line=1, source_text="seed x with 42",
+            ir_op="seed", concept="variable", explanation="Create a named value",
+            shape="box", icon="[=]", gate_level=1, details={"name": "x"},
+        )
+        d = node.to_dict()
+        assert d["id"] == "n0"
+        assert d["ir_op"] == "seed"
+        assert d["gate_level"] == 1
+
+    def test_empty_poem(self):
+        nodes = visualize_poem("# just a comment\n")
+        assert nodes == []
+
+    def test_empty_command(self):
+        nodes = visualize_command("")
+        assert nodes == []
