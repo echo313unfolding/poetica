@@ -1,6 +1,7 @@
 """Tests for the poetica standalone package."""
 
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -34,6 +35,10 @@ from poetica.curriculum import (
     load_curriculum, find_curriculum, list_curricula,
     inspect_curriculum, map_curriculum, generate_lesson, generate_evidence_json,
     KNOWN_OPS,
+)
+from poetica.syllabus import (
+    extract_syllabus, inspect_syllabus, draft_curriculum_yaml,
+    match_concepts, suggest_domain, suggest_visual_worlds, ExtractedUnit,
 )
 
 
@@ -1849,3 +1854,235 @@ class TestCurriculum:
         code = compile_poem("name test\nseed x with 1\nemit x", target="python")
         assert "x = 1" in code
         assert "print" in code
+
+
+# --- Syllabus Import ---
+
+class TestSyllabus:
+    def _read_syllabus(self):
+        import pathlib
+        path = pathlib.Path(__file__).parent.parent / "examples" / "syllabi" / "grade5_robotics_syllabus.txt"
+        return path.read_text()
+
+    def test_extract_title(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        assert "Robotics" in extraction.title or "Grade 5" in extraction.title
+
+    def test_extract_grade_band(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        assert extraction.grade_band == "5"
+
+    def test_extract_subject(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        assert extraction.subject == "Robotics"
+
+    def test_extract_standards(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        assert len(extraction.standards_refs) >= 2
+        refs_str = " ".join(extraction.standards_refs)
+        assert "CSTA" in refs_str
+        assert "NGSS" in refs_str
+
+    def test_extract_units(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        assert len(extraction.units) >= 4
+        titles = [u.title for u in extraction.units]
+        assert "Inputs and Outputs" in titles
+        assert "Conditions and Decisions" in titles
+
+    def test_extract_objectives(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        unit1 = extraction.units[0]
+        assert len(unit1.objectives) >= 2
+        assert any("input" in obj.lower() for obj in unit1.objectives)
+
+    def test_extract_vocabulary(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        unit1 = extraction.units[0]
+        assert len(unit1.vocabulary) >= 3
+        assert "input" in unit1.vocabulary or "sensor" in unit1.vocabulary
+
+    def test_match_sensor_trigger_to_concept(self):
+        """'sensors can trigger actions' maps to input_condition_action."""
+        unit = ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=[
+                "Students will understand that sensors can trigger actions in a robot.",
+            ],
+        )
+        matches = match_concepts(unit)
+        concept_ids = [m.concept_id for m in matches]
+        assert "input_condition_action" in concept_ids
+
+    def test_match_store_values_to_variable(self):
+        """'store and change values' maps to variable_state."""
+        unit = ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=[
+                "Students will store and change values using variables.",
+            ],
+        )
+        matches = match_concepts(unit)
+        concept_ids = [m.concept_id for m in matches]
+        assert "variable_state" in concept_ids
+
+    def test_match_condition_to_decision(self):
+        unit = ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=[
+                "Students will use conditions to make decisions in code.",
+            ],
+        )
+        matches = match_concepts(unit)
+        concept_ids = [m.concept_id for m in matches]
+        assert "decision" in concept_ids
+
+    def test_match_loop_to_loop_collection(self):
+        unit = ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=[
+                "Students will repeat actions using loops.",
+                "Students will iterate over collections of data.",
+            ],
+        )
+        matches = match_concepts(unit)
+        concept_ids = [m.concept_id for m in matches]
+        assert "loop_collection" in concept_ids
+
+    def test_match_debug_to_debugging(self):
+        unit = ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=[
+                "Students will debug programs by finding misplaced instructions.",
+            ],
+        )
+        matches = match_concepts(unit)
+        concept_ids = [m.concept_id for m in matches]
+        assert "debugging" in concept_ids
+
+    def test_match_confidence_is_bounded(self):
+        unit = ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=[
+                "Students will understand that sensors can trigger actions in a robot.",
+            ],
+        )
+        matches = match_concepts(unit)
+        for m in matches:
+            assert 0.0 <= m.confidence <= 1.0
+
+    def test_suggest_domain_robotics(self):
+        text = "This course covers robots, sensors, and motors."
+        assert suggest_domain(text) == "robotics"
+
+    def test_suggest_domain_empty(self):
+        text = "This course covers philosophy."
+        assert suggest_domain(text) == ""
+
+    def test_suggest_visual_worlds(self):
+        matches = match_concepts(ExtractedUnit(
+            title="Test",
+            raw_text="",
+            objectives=["Students will understand that sensors can trigger actions."],
+        ))
+        worlds = suggest_visual_worlds(matches)
+        assert "robot_grid" in worlds
+
+    def test_inspect_syllabus(self):
+        text = self._read_syllabus()
+        output = inspect_syllabus(text)
+        assert "Robotics" in output
+        assert "Unit" in output
+        assert "Objectives" in output
+
+    def test_draft_yaml_output(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(extraction, subject="Robotics", grade_band="5")
+        assert "curriculum:" in yaml_str
+        assert "grade_band:" in yaml_str
+        assert "units:" in yaml_str
+        assert "needs_teacher_review: true" in yaml_str
+
+    def test_draft_yaml_has_concepts(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(extraction)
+        assert "input_condition_action" in yaml_str or "decision" in yaml_str
+
+    def test_draft_yaml_suggests_domain(self):
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(extraction)
+        assert "domain: robotics" in yaml_str
+
+    def test_draft_yaml_loadable(self):
+        """Generated YAML can be loaded by load_curriculum()."""
+        import tempfile
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(extraction, subject="Robotics", grade_band="5")
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(yaml_str)
+            tmp_path = f.name
+
+        try:
+            pack = load_curriculum(tmp_path)
+            assert pack.curriculum != ""
+            assert pack.grade_band == "5"
+            assert len(pack.units) >= 4
+        finally:
+            os.unlink(tmp_path)
+
+    def test_draft_yaml_validate_reports_review(self):
+        """Generated YAML should validate (or report clear review warnings)."""
+        import tempfile
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(extraction, subject="Robotics", grade_band="5")
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(yaml_str)
+            tmp_path = f.name
+
+        try:
+            pack = load_curriculum(tmp_path)
+            errors = pack.validate()
+            # Should not have fatal errors (unknown ops, missing name, etc.)
+            fatal = [e for e in errors if "unknown op" in e or "name is required" in e]
+            assert len(fatal) == 0, f"Fatal validation errors: {fatal}"
+        finally:
+            os.unlink(tmp_path)
+
+    def test_full_pipeline_syllabus_to_lesson(self):
+        """Full pipeline: syllabus → extract → draft → load → get lesson → generate."""
+        import tempfile
+        text = self._read_syllabus()
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(extraction, subject="Robotics", grade_band="5")
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+            f.write(yaml_str)
+            tmp_path = f.name
+
+        try:
+            pack = load_curriculum(tmp_path)
+            # Should have concepts we can generate lessons for
+            all_concepts = pack.list_concepts()
+            assert len(all_concepts) > 0
+        finally:
+            os.unlink(tmp_path)

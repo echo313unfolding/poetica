@@ -29,6 +29,9 @@ from poetica.curriculum import (
     load_curriculum, find_curriculum, list_curricula,
     inspect_curriculum, map_curriculum, generate_lesson, generate_evidence_json,
 )
+from poetica.syllabus import (
+    extract_syllabus, inspect_syllabus, draft_curriculum_yaml,
+)
 
 
 def _load_source(args, with_map=False):
@@ -291,6 +294,33 @@ def _load_curriculum_by_name_or_file(ref):
     sys.exit(1)
 
 
+def cmd_syllabus(args):
+    """Syllabus import commands."""
+    action = args.syllabus_action
+
+    with open(args.file, 'r') as f:
+        text = f.read()
+
+    if action == "inspect":
+        print(inspect_syllabus(text))
+
+    elif action == "draft":
+        extraction = extract_syllabus(text)
+        yaml_str = draft_curriculum_yaml(
+            extraction,
+            subject=getattr(args, 'subject', '') or '',
+            grade_band=getattr(args, 'grade_band', '') or '',
+            domain=getattr(args, 'domain', '') or '',
+        )
+        output = getattr(args, 'output', None)
+        if output:
+            with open(output, 'w') as f:
+                f.write(yaml_str)
+            print(f"Wrote draft curriculum to {output}", file=sys.stderr)
+        else:
+            print(yaml_str)
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="poetica",
@@ -395,6 +425,22 @@ def main():
                               default="json", help="Output format (default: json)")
 
     cur.set_defaults(func=cmd_curriculum)
+
+    # syllabus
+    syl = sub.add_parser("syllabus", help="Syllabus import commands")
+    syl_sub = syl.add_subparsers(dest="syllabus_action")
+
+    syl_inspect = syl_sub.add_parser("inspect", help="Inspect a syllabus")
+    syl_inspect.add_argument("file", help="Path to syllabus text file")
+
+    syl_draft = syl_sub.add_parser("draft", help="Generate draft curriculum from syllabus")
+    syl_draft.add_argument("file", help="Path to syllabus text file")
+    syl_draft.add_argument("--subject", "-s", help="Subject override")
+    syl_draft.add_argument("--grade-band", "-g", help="Grade band override")
+    syl_draft.add_argument("--domain", "-d", help="Domain pack")
+    syl_draft.add_argument("--output", "-o", help="Output file (default: stdout)")
+
+    syl.set_defaults(func=cmd_syllabus)
 
     args = p.parse_args()
     if not args.command:

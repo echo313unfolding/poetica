@@ -1,0 +1,57 @@
+Grade 5 Robotics and Computing
+Mrs. Johnson — Room 204
+Fall 2026
+
+Course Description:
+Students explore computing concepts through hands-on robotics activities.
+They will learn how sensors detect the environment, how conditions trigger
+actions, and how variables store and change values over time.
+
+Standards:
+CSTA-1B-AP-10, CSTA-1B-AP-11, CSTA-1B-AP-12
+NGSS 3-5-ETS1-1, NGSS 3-5-ETS1-2
+
+Unit 1: Inputs and Outputs
+Objectives:
+- Students will understand that programs have inputs and outputs.
+- Students will identify sensor readings as input values.
+- Students will display output using print/emit statements.
+Vocabulary: input, output, sensor, variable, value
+Activities: Build a simple robot that reads a distance sensor and displays the reading.
+
+Unit 2: Conditions and Decisions
+Objectives:
+- Students will understand that sensors can trigger actions in a robot.
+- Students will use conditions to make decisions in code.
+- Students will modify thresholds to change robot behavior.
+Vocabulary: condition, threshold, comparison, if/else, decision
+Activities: Program a robot to stop when an obstacle is detected.
+
+Unit 3: Variables and State
+Objectives:
+- Students will store and change values using variables.
+- Students will trace how variable values change through a program.
+- Students will explain the difference between initial and current state.
+Vocabulary: variable, state, assignment, value, container
+Activities: Track robot speed changes as it encounters obstacles.
+
+Unit 4: Sequences and Order
+Objectives:
+- Students will understand that programs execute in order, top to bottom.
+- Students will predict output based on instruction order.
+- Students will debug programs by finding misplaced instructions.
+Vocabulary: sequence, order, instruction, step, debug
+Activities: Reorder scrambled robot commands to achieve a goal.
+
+Unit 5: Loops and Repetition
+Objectives:
+- Students will repeat actions using loops.
+- Students will iterate over collections of data.
+- Students will explain when a loop is more efficient than repeating code.
+Vocabulary: loop, repeat, for each, collection, iteration
+Activities: Program a robot to patrol a path by visiting each waypoint.
+
+Assessment:
+Students demonstrate understanding through modified programs, verbal
+explanations, and a final project where they design a robot behavior
+from scratch.
