@@ -23,7 +23,7 @@ from poetica.gate import Gate, GateDecision, GateLevel, GateError
 from poetica.receipt import Receipt
 from poetica.emitters import get_emitter, list_targets
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 
 def compile_poem(source: str, target: str = "python", level: int = 1) -> str:
