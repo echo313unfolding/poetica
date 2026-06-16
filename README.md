@@ -22,11 +22,46 @@ poetica compile hello.poem --type verse     # → SQL
 
 ## Why
 
-Programming is gatekept by syntax. SQL proved you can make databases accessible to non-programmers with a constrained language. Poetica does the same for general computation.
+Programming is gatekept by syntax. Students see `if sensor_distance < 10:` before they understand what a condition does. Poetica flips that: see the robot stop, describe what happened, then see the code.
 
-**For non-coders:** Write programs in words you already understand. The gate prevents you from doing anything dangerous at lower levels. You can't `lift` data to a remote server at Level 1 — you have to earn it.
+**For teachers:** Bring your existing syllabus. Poetica maps objectives to computing concepts, domain-specific language, visual simulations, and evidence criteria. No naked syntax — every code token appears with its meaning.
+
+**For students:** Write in the language of your subject. `stop motor`, not `motor_speed = 0`. See what happens in a visual world before you see Python. Learn what the code *means* before you memorize how it's *spelled*.
 
 **For coders:** Write polyglot programs once. Think in operations, not syntax. `seed`, `grow`, `emit`, `pack`, `lift`, `bloom` — these map to the same intent in every language. The poem type is just a compiler flag.
+
+## Demo: Grade 5 Robotics
+
+A complete vertical slice from teacher syllabus to student evidence:
+
+```bash
+bash demos/grade5_robotics/run_demo.sh
+```
+
+Student writes robotics language:
+```
+when sensor.distance < 10:
+    stop motor
+    emit "obstacle detected"
+```
+
+Poetica shows five layers (no naked syntax):
+```
+Original:  stop motor                  ← what the student wrote
+Canonical: seed motor_speed with 0     ← what Poetica compiled
+Concept:   actuator_control            ← the robotics concept
+Code:      motor_speed = 0             ← the Python code
+Visual:    the motor stops spinning    ← what you'd SEE
+```
+
+Evidence replaces a letter grade:
+```json
+{"description": "student can explain input -> condition -> action", "met": null}
+{"description": "student can modify the threshold", "met": null}
+{"description": "student can debug a wrong comparison", "met": null}
+```
+
+See [`demos/grade5_robotics/PITCH.md`](demos/grade5_robotics/PITCH.md) for the full pitch.
 
 ## Install
 
@@ -159,6 +194,36 @@ poetica compile hello.poem --type sonnet --receipt 2>receipt.json
 }
 ```
 
+## Education Stack
+
+Beyond the compiler, Poetica includes a curriculum-aware education layer:
+
+| Layer | What it does |
+|-------|-------------|
+| **Domain Packs** | Subject-specific language (robotics, microbiology, finance) |
+| **Syllabus Import** | Extract objectives from teacher syllabi into draft curriculum YAML |
+| **Curriculum Mapper** | Map standards/objectives → concepts → ops → worlds → evidence |
+| **Alignment Map** | Phrase-level source maps: source → concept → code |
+| **Lesson Format** | 4-layer (or 5-layer with domain) "no naked syntax" output |
+| **Visual Worlds** | Step-by-step simulations (robot_grid, garden, filesystem) |
+| **Evidence Portfolio** | Observable criteria per concept, not letter grades |
+
+```bash
+# Import a syllabus
+poetica syllabus inspect my_syllabus.txt
+poetica syllabus draft my_syllabus.txt --domain robotics --output curriculum.yaml
+
+# Use the curriculum
+poetica curriculum inspect curriculum.yaml
+poetica curriculum lesson curriculum.yaml input_condition_action --format lesson
+
+# Align with domain provenance
+poetica align program.poem --domain robotics --format lesson
+
+# Visual simulation
+poetica play program.poem --domain robotics --world robot_grid
+```
+
 ## Examples
 
 See `examples/` for complete programs:
@@ -168,6 +233,8 @@ See `examples/` for complete programs:
 - `fizzbuzz.poem` — Level 2, logic and iteration
 - `pipeline.poem` — Level 4, external data pipeline
 - `deploy.poem` — Level 4, full deployment workflow
+- `sensor.poem` — Level 2, robotics domain
+- `assay.poem` — Level 4, microbiology domain
 
 ## Same program, six languages
 
