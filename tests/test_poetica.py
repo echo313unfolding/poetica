@@ -41,6 +41,10 @@ from poetica.syllabus import (
     match_concepts, suggest_domain, suggest_visual_worlds, ExtractedUnit,
 )
 from poetica.lower import lower, lower_source, LoweringResult, OperationToken
+from poetica.bridge import (
+    resolve, execute, compile_and_run, list_bridge_ops,
+    BridgeOp, BridgeReceipt, BridgeError,
+)
 
 
 # --- Parser ---
@@ -490,7 +494,7 @@ class TestCompilePoem:
             compile_poem("lift data to remote", level=1)
 
     def test_version(self):
-        assert __version__ == "0.1.0"
+        assert __version__ == "0.1.1"
 
     def test_expressions_pass_through(self):
         code = compile_poem("name t\nseed x with 5 + 3", target="python")
@@ -2457,3 +2461,180 @@ class TestLowering:
         result = lower_source("seed x with 1\nemit x", level=1)
         for op in result.ops:
             assert op.level <= result.gate_level
+
+
+# --- Bridge (operation token → CLI/tool execution) ---
+
+class TestBridge:
+    """Tests for the bridge layer — operation tokens to CLI commands."""
+
+    def test_list_bridge_ops(self):
+        ops = list_bridge_ops()
+        assert len(ops) >= 30
+        assert "vcs.status" in ops
+        assert "run.python" in ops
+        assert "test.python" in ops
+        assert ops["vcs.status"] == 1
+        assert ops["run.python"] == 4
+
+    # --- Resolve (no execution) ---
+
+    def test_resolve_vcs_status(self):
+        op = resolve("vcs.status")
+        assert op.token == "vcs.status"
+        assert op.argv == ["git", "status"]
+        assert op.level == 1
+
+    def test_resolve_run_python(self):
+        op = resolve("run.python", {"file": "hello.py"})
+        assert op.argv == ["python3", "hello.py"]
+        assert op.level == 4
+
+    def test_resolve_test_python(self):
+        op = resolve("test.python", {"path": "tests/", "verbose": True})
+        assert op.argv == ["python3", "-m", "pytest", "tests/", "-v"]
+
+    def test_resolve_build_rust(self):
+        op = resolve("build.rust", {"release": True})
+        assert op.argv == ["cargo", "build", "--release"]
+
+    def test_resolve_vcs_commit(self):
+        op = resolve("vcs.commit", {"message": "fix: typo"})
+        assert op.argv == ["git", "commit", "-m", "fix: typo"]
+
+    def test_resolve_pipe_jq(self):
+        op = resolve("pipe.jq", {"filter": ".data[]", "file": "out.json"})
+        assert op.argv == ["jq", ".data[]", "out.json"]
+
+    def test_resolve_fs_list(self):
+        op = resolve("fs.list", {"path": "src/"})
+        assert op.argv == ["ls", "-la", "src/"]
+        assert op.level == 1
+
+    def test_resolve_package_install_pip(self):
+        op = resolve("package.install", {"package": "requests", "manager": "pip"})
+        assert op.argv == ["pip3", "install", "requests"]
+
+    def test_resolve_package_install_npm(self):
+        op = resolve("package.install", {"package": "express", "manager": "npm"})
+        assert op.argv == ["npm", "install", "express"]
+
+    def test_resolve_build_c(self):
+        op = resolve("build.c", {"file": "main.c", "output": "main"})
+        assert op.argv == ["gcc", "main.c", "-o", "main"]
+
+    def test_resolve_deploy_docker_build(self):
+        op = resolve("deploy.docker_build", {"tag": "myapp:v1"})
+        assert op.argv == ["docker", "build", "-t", "myapp:v1", "."]
+
+    def test_resolve_unknown_token_raises(self):
+        with pytest.raises(BridgeError, match="Unknown bridge operation"):
+            resolve("run.cobol")
+
+    # --- Safety: path validation ---
+
+    def test_path_traversal_blocked(self):
+        with pytest.raises(BridgeError, match="traversal"):
+            resolve("run.python", {"file": "../../etc/passwd"})
+
+    def test_shell_metachar_blocked(self):
+        with pytest.raises(BridgeError, match="Unsafe"):
+            resolve("run.python", {"file": "hello; rm -rf /"})
+
+    def test_invalid_package_blocked(self):
+        with pytest.raises(BridgeError, match="Invalid package"):
+            resolve("package.install", {"package": "; curl evil.com"})
+
+    def test_git_message_control_chars_blocked(self):
+        with pytest.raises(BridgeError, match="Invalid git message"):
+            resolve("vcs.commit", {"message": "fix\x00injection"})
+
+    def test_fs_remove_is_single_file(self):
+        """rm should never get -rf."""
+        op = resolve("fs.remove", {"file": "temp.txt"})
+        assert op.argv == ["rm", "temp.txt"]
+        assert "-rf" not in op.argv
+        assert "-r" not in op.argv
+
+    # --- Gate check (via execute dry-run) ---
+
+    def test_l1_op_allowed_at_l1(self):
+        receipt = execute("vcs.status", level=1)
+        assert receipt.gate_decision == "ALLOW"
+        assert not receipt.executed
+
+    def test_l4_op_blocked_at_l1(self):
+        receipt = execute("run.python", {"file": "x.py"}, level=1)
+        assert "REJECT" in receipt.gate_decision
+        assert not receipt.executed
+
+    def test_l4_op_allowed_at_l4(self):
+        receipt = execute("run.python", {"file": "x.py"}, level=4)
+        assert receipt.gate_decision == "ALLOW"
+        assert not receipt.executed  # still dry-run
+
+    # --- Actual execution (safe ops only) ---
+
+    def test_execute_pipe_wc(self):
+        """wc -l on a known file — safe to run."""
+        import tempfile, os
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
+            f.write("line1\nline2\nline3\n")
+            tmp = f.name
+        try:
+            receipt = execute("pipe.wc", {"file": tmp}, level=1, approve=True)
+            assert receipt.executed
+            assert receipt.exit_code == 0
+            assert "3" in receipt.stdout
+            assert receipt.stdout_hash  # non-empty
+        finally:
+            os.unlink(tmp)
+
+    def test_execute_fs_list(self):
+        receipt = execute("fs.list", {"path": "/tmp"}, level=1, approve=True)
+        assert receipt.executed
+        assert receipt.exit_code == 0
+
+    # --- compile_and_run ---
+
+    def test_compile_and_run_dry(self):
+        result = compile_and_run(
+            'name hello\nseed x with 42\nemit x',
+            target="python", level=4, approve=False)
+        assert "compiled_code" in result
+        assert "def hello():" in result["compiled_code"]
+        receipt = result["bridge_receipt"]
+        assert receipt["gate_decision"] == "ALLOW"
+        assert not receipt["executed"]
+
+    def test_compile_and_run_execute(self):
+        result = compile_and_run(
+            'name hello\nseed x with 42\nemit x',
+            target="python", level=4, approve=True)
+        receipt = result["bridge_receipt"]
+        assert receipt["executed"]
+        assert receipt["exit_code"] == 0
+        assert "42" in receipt.get("stdout", "")
+
+    def test_compile_and_run_includes_lowering(self):
+        result = compile_and_run(
+            'seed x with 1\nemit x',
+            target="python", level=4, approve=False)
+        assert result["lowering"]["schema"] == "poetica.lower.v1"
+        assert result["lowering"]["program"] == "main"
+
+    def test_compile_and_run_sql_no_runner(self):
+        result = compile_and_run(
+            'seed x with 1\nemit x',
+            target="sql", level=4)
+        assert "No runner" in result.get("note", "")
+
+    # --- Receipt structure ---
+
+    def test_receipt_json_schema(self):
+        receipt = execute("vcs.status", level=1)
+        j = json.loads(receipt.to_json())
+        assert j["schema"] == "poetica.bridge.receipt.v1"
+        assert j["operation_token"] == "vcs.status"
+        assert j["gate_decision"] == "ALLOW"
+        assert "executed" not in j or j["executed"] is False

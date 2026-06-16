@@ -33,6 +33,10 @@ from poetica.syllabus import (
     extract_syllabus, inspect_syllabus, draft_curriculum_yaml,
 )
 from poetica.lower import lower_source, lower
+from poetica.bridge import (
+    resolve, execute, compile_and_run, list_bridge_ops,
+    BridgeError,
+)
 
 
 def _load_source(args, with_map=False):
@@ -361,6 +365,88 @@ def cmd_lower(args):
         print(result.to_json())
 
 
+def cmd_bridge(args):
+    """Execute a bridge operation token (compile/run/test/build/deploy)."""
+    params = {}
+    if args.params:
+        for pair in args.params:
+            if "=" in pair:
+                k, v = pair.split("=", 1)
+                params[k] = v
+            else:
+                params[pair] = True
+
+    receipt = execute(args.token, params,
+                      level=args.level, approve=args.approve,
+                      timeout=args.timeout)
+
+    if args.format == "json":
+        print(receipt.to_json())
+    else:
+        status = "EXECUTED" if receipt.executed else ("DRY RUN" if receipt.gate_decision == "ALLOW" else "BLOCKED")
+        print(f"  [{status}] {receipt.operation_token}")
+        print(f"  Command: {' '.join(receipt.argv)}")
+        print(f"  Gate:    {receipt.gate_decision} (L{receipt.gate_level})")
+        if receipt.executed:
+            print(f"  Exit:    {receipt.exit_code}")
+            print(f"  Time:    {receipt.duration_ms:.0f}ms")
+            if receipt.stdout:
+                print(f"\n{receipt.stdout}", end="")
+            if receipt.stderr:
+                print(receipt.stderr, end="", file=sys.stderr)
+
+
+def cmd_run_poem(args):
+    """Compile a poem and run the output (full pipeline)."""
+    source = _load_source(args)
+    target = args.type or args.target or "python"
+
+    result = compile_and_run(
+        source, target=target, level=args.level, approve=args.approve)
+
+    if "error" in result:
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.format == "json":
+        print(json.dumps(result, indent=2))
+    else:
+        print(result["compiled_code"])
+        receipt = result.get("bridge_receipt", {})
+        if receipt:
+            status = "RAN" if receipt.get("executed") else "DRY RUN"
+            print(f"\n# [{status}] {receipt.get('operation_token', '?')}", file=sys.stderr)
+            print(f"# Command: {' '.join(receipt.get('argv', []))}", file=sys.stderr)
+            if receipt.get("executed") and receipt.get("stdout"):
+                print(f"\n--- output ---\n{receipt['stdout']}", end="")
+
+
+def cmd_ops(args):
+    """List all available operation tokens."""
+    ops = list_bridge_ops()
+    from poetica.lower import _OP_TOKEN_MAP
+    print("Operation Tokens")
+    print("=" * 60)
+    print()
+    print("Poetica IR → Lowering tokens:")
+    for poetica_op, token in sorted(_OP_TOKEN_MAP.items()):
+        from poetica.lower import _op_level
+        lvl = _op_level(poetica_op)
+        print(f"  L{lvl}  {poetica_op:12s} → {token}")
+    print()
+    print("Bridge → CLI/tool tokens:")
+    families = {}
+    for token, level in sorted(ops.items()):
+        family = token.split(".")[0]
+        families.setdefault(family, []).append((token, level))
+    for family, items in sorted(families.items()):
+        print(f"  {family}:")
+        for token, level in items:
+            print(f"    L{level}  {token}")
+    print()
+    print(f"Total: {len(_OP_TOKEN_MAP)} lowering + {len(ops)} bridge = {len(_OP_TOKEN_MAP) + len(ops)} operation tokens")
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="poetica",
@@ -492,6 +578,33 @@ def main():
     low.add_argument("--execute-dry-run", action="store_true",
                      help="Show what KRISPER would execute (does not execute)")
     low.set_defaults(func=cmd_lower)
+
+    # bridge
+    brg = sub.add_parser("bridge", help="Execute a bridge operation token")
+    brg.add_argument("token", help="Operation token (e.g. run.python, vcs.status, test.python)")
+    brg.add_argument("params", nargs="*", help="key=value parameters")
+    brg.add_argument("--level", "-l", type=int, default=1, help="Capability level 1-5 (default: 1)")
+    brg.add_argument("--approve", action="store_true", help="Actually execute (default: dry-run)")
+    brg.add_argument("--timeout", type=int, default=60, help="Timeout in seconds (default: 60)")
+    brg.add_argument("--format", "-f", choices=["text", "json"], default="text",
+                     help="Output format (default: text)")
+    brg.set_defaults(func=cmd_bridge)
+
+    # run (compile + run)
+    run = sub.add_parser("run", help="Compile a poem and run the output")
+    run.add_argument("file", help="Path to .poem file (or - for stdin)")
+    run.add_argument("--type", "-t", help="Poem type / target language")
+    run.add_argument("--target", help="Target language (python, rust, etc.)")
+    run.add_argument("--level", "-l", type=int, default=4, help="Capability level (default: 4)")
+    run.add_argument("--approve", action="store_true", help="Actually execute (default: dry-run)")
+    run.add_argument("--domain", "-d", help="Domain pack")
+    run.add_argument("--format", "-f", choices=["text", "json"], default="text",
+                     help="Output format (default: text)")
+    run.set_defaults(func=cmd_run_poem)
+
+    # ops
+    ops = sub.add_parser("ops", help="List all available operation tokens")
+    ops.set_defaults(func=cmd_ops)
 
     args = p.parse_args()
     if not args.command:
