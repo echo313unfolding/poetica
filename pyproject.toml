@@ -5,19 +5,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "poetica"
 version = "0.1.0"
-description = "Write what you mean. Poetica compiles human-readable programs into real code, gated by capability level."
+description = "Curriculum-aware STEM learning: visual-first, label-second coding from syllabus to student evidence."
 readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.9"
-keywords = ["dsl", "compiler", "code-generation", "accessibility", "polyglot"]
+keywords = ["dsl", "compiler", "education", "stem", "curriculum", "visual-learning", "code-generation"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Education",
     "Topic :: Software Development :: Code Generators",
     "Topic :: Software Development :: Compilers",
+    "Topic :: Education",
     "Programming Language :: Python :: 3",
 ]
+
+[project.optional-dependencies]
+yaml = ["pyyaml>=6.0"]
 
 [project.scripts]
 poetica = "poetica.cli:main"
