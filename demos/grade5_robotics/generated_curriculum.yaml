@@ -1,0 +1,228 @@
+# DRAFT — generated from syllabus, needs teacher review
+# Source: Grade 5 Robotics and Computing
+
+curriculum: grade_5_robotics_and_computing
+grade_band: "5"
+subject: Robotics
+standard_source: CSTA/NGSS 3
+domain: robotics
+target_languages:
+  - python
+
+units:
+  - title: "Inputs and Outputs"
+    standards:
+      - CSTA-1B-AP-10
+      - CSTA-1B-AP-11
+      - CSTA-1B-AP-12
+      - NGSS 3-5-ETS1-1
+      - NGSS 3-5-ETS1-2
+    concepts:
+      - id: input_output
+        label: Input and Output
+        poetica_ops: [seed, emit]
+        # confidence: 0.47  matched: input, output
+        # source: "Students will understand that programs have inputs and outputs."
+    poetica_ops: [emit, seed]
+    visual_worlds:
+      - robot_grid
+    lessons:
+      - concept: input_output
+        phrase: |
+          # TODO: write Poetica phrase for input_output
+          name grade_5_robotics_and_computing_input_output
+          seed x with 1
+          emit x
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can identify the input value
+          - student can identify the output
+          - student can change the input and predict the output
+    evidence:
+      - "Students will understand that programs have inputs and outputs."
+      - "Students will identify sensor readings as input values."
+      - "Students will display output using print/emit statements."
+
+  - title: "Conditions and Decisions"
+    standards:
+      - CSTA-1B-AP-10
+      - CSTA-1B-AP-11
+      - CSTA-1B-AP-12
+      - NGSS 3-5-ETS1-1
+      - NGSS 3-5-ETS1-2
+    concepts:
+      - id: input_condition_action
+        label: Input → Condition → Action
+        poetica_ops: [seed, when, emit, flow]
+        # confidence: 0.42  matched: trigger action
+        # source: "Students will understand that sensors can trigger actions in a robot."
+      - id: decision
+        label: Making Decisions
+        poetica_ops: [seed, when, emit]
+        # confidence: 0.55  matched: condition, decision
+        # source: "Students will use conditions to make decisions in code."
+    poetica_ops: [emit, flow, seed, when]
+    visual_worlds:
+      - robot_grid
+    lessons:
+      - concept: input_condition_action
+        phrase: |
+          # TODO: write Poetica phrase for input_condition_action
+          name grade_5_robotics_and_computing_input_condition_action
+          seed x with 1
+          when x > 0:
+              emit "yes"
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can explain input → condition → action
+          - student can modify the threshold
+          - student can debug a wrong comparison
+      - concept: decision
+        phrase: |
+          # TODO: write Poetica phrase for decision
+          name grade_5_robotics_and_computing_decision
+          seed x with 1
+          when x > 0:
+              emit "yes"
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can trace which path runs
+          - student can change the condition and predict the new output
+    evidence:
+      - "Students will understand that sensors can trigger actions in a robot."
+      - "Students will use conditions to make decisions in code."
+      - "Students will modify thresholds to change robot behavior."
+
+  - title: "Variables and State"
+    standards:
+      - CSTA-1B-AP-10
+      - CSTA-1B-AP-11
+      - CSTA-1B-AP-12
+      - NGSS 3-5-ETS1-1
+      - NGSS 3-5-ETS1-2
+    concepts:
+      - id: variable_state
+        label: Variables and State
+        poetica_ops: [seed, flow, emit]
+        # confidence: 0.55  matched: variable, change value
+        # source: "Students will store and change values using variables."
+    poetica_ops: [emit, flow, seed]
+    visual_worlds:
+      - robot_grid
+    lessons:
+      - concept: variable_state
+        phrase: |
+          # TODO: write Poetica phrase for variable_state
+          name grade_5_robotics_and_computing_variable_state
+          seed x with 1
+          emit x
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can name what the variable holds
+          - student can trace how a value changes through the program
+          - student can explain initial vs current state
+    evidence:
+      - "Students will store and change values using variables."
+      - "Students will trace how variable values change through a program."
+      - "Students will explain the difference between initial and current state."
+
+  - title: "Sequences and Order"
+    standards:
+      - CSTA-1B-AP-10
+      - CSTA-1B-AP-11
+      - CSTA-1B-AP-12
+      - NGSS 3-5-ETS1-1
+      - NGSS 3-5-ETS1-2
+    concepts:
+      - id: sequence
+        label: Sequence and Order
+        poetica_ops: [seed, emit, flow]
+        # confidence: 0.8  matched: order, top to bottom, execute in order
+        # source: "Students will understand that programs execute in order, top to bottom."
+      - id: debugging
+        label: Debugging
+        poetica_ops: [seed, when, emit, bloom]
+        # confidence: 0.53  matched: debug, misplaced
+        # source: "Students will debug programs by finding misplaced instructions."
+    poetica_ops: [bloom, emit, flow, seed, when]
+    visual_worlds:
+      - robot_grid
+    lessons:
+      - concept: sequence
+        phrase: |
+          # TODO: write Poetica phrase for sequence
+          name grade_5_robotics_and_computing_sequence
+          seed x with 1
+          emit x
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can predict output order
+          - student can explain what happens if lines are reordered
+      - concept: debugging
+        phrase: |
+          # TODO: write Poetica phrase for debugging
+          name grade_5_robotics_and_computing_debugging
+          seed x with 1
+          when x > 0:
+              emit "yes"
+        domain: robotics
+        target_languages: [python]
+        visual_world: robot_grid
+        evidence:
+          - student can identify the bug
+          - student can explain why the output is wrong
+          - student can fix the error
+    evidence:
+      - "Students will understand that programs execute in order, top to bottom."
+      - "Students will predict output based on instruction order."
+      - "Students will debug programs by finding misplaced instructions."
+
+  - title: "Loops and Repetition"
+    standards:
+      - CSTA-1B-AP-10
+      - CSTA-1B-AP-11
+      - CSTA-1B-AP-12
+      - NGSS 3-5-ETS1-1
+      - NGSS 3-5-ETS1-2
+    concepts:
+      - id: loop_collection
+        label: Loops and Collections
+        poetica_ops: [seed, for, emit, grow]
+        # confidence: 0.42  matched: loop, repeat
+        # source: "Students will repeat actions using loops."
+    poetica_ops: [emit, for, grow, seed]
+    visual_worlds:
+      - garden
+      - robot_grid
+    lessons:
+      - concept: loop_collection
+        phrase: |
+          # TODO: write Poetica phrase for loop_collection
+          name grade_5_robotics_and_computing_loop_collection
+          seed x with 1
+          emit x
+        domain: robotics
+        target_languages: [python]
+        visual_world: garden
+        evidence:
+          - student can predict how many times the loop runs
+          - student can add items and predict the result
+    evidence:
+      - "Students will repeat actions using loops."
+      - "Students will iterate over collections of data."
+      - "Students will explain when a loop is more efficient than repeating code."
+
+# needs_teacher_review: true
+# Generated mappings are inferred from keyword matching.
+# Teacher should verify standards alignment, phrase content,
+# and evidence criteria before classroom use.

@@ -1,0 +1,96 @@
+Lesson: Input → Condition → Action
+Concept: input_condition_action
+Domain: robotics
+Standard: CSTA-1B-AP-12 / NGSS 3-5-ETS1-2
+
+Objective:
+Students will understand that sensors can trigger actions in a robot.
+
+================================================================================
+  ALIGNMENT LESSON — obstacle_stop.poem with robotics domain
+================================================================================
+
+  Original:  seed sensor.distance with 25
+  Canonical: seed sensor_distance with 25
+  Concept:   sensor_reading
+  Code:      sensor_distance = 25
+  Visual:    the ultrasonic sensor beam bouncing back
+
+  Original:  seed motor.speed with 100
+  Canonical: seed motor_speed with 100
+  Concept:   actuator_state
+  Code:      motor_speed = 100
+  Visual:    the motor spinning
+
+  Original:  when sensor.distance < 10:
+  Canonical: when sensor_distance < 10:
+  Concept:   sensor_reading
+  Code:      if sensor_distance < 10:
+  Visual:    the ultrasonic sensor beam bouncing back
+
+  Original:  stop motor
+  Canonical: seed motor_speed with 0
+  Concept:   actuator_control
+  Code:      motor_speed = 0
+  Visual:    the motor stops spinning
+
+  Visual:  The value "obstacle detected" leaves the program and appears on screen
+  Phrase:  emit "obstacle detected"
+  Concept: output (Send a value to the screen)
+  Code:    print("obstacle detected")
+
+  Visual:  The default path — taken when nothing else matched
+  Phrase:  else:
+  Concept: fallback (If nothing else matched, do this)
+  Code:    else:
+
+  Visual:  The value "path clear" leaves the program and appears on screen
+  Phrase:  emit "path clear"
+  Concept: output (Send a value to the screen)
+  Code:    print("path clear")
+
+  Original:  emit sensor.distance
+  Canonical: emit sensor_distance
+  Concept:   sensor_reading
+  Code:      print(sensor_distance)
+  Visual:    the ultrasonic sensor beam bouncing back
+
+  Visual:  The program signals it is done: "check complete"
+  Phrase:  bloom "check complete"
+  Concept: return (Signal completion)
+  Code:    return "check complete"
+
+================================================================================
+  WHAT THE STUDENT SEES
+================================================================================
+
+The student reads robot language:
+
+    when sensor.distance falls below 10:
+        stop motor
+        emit "obstacle detected"
+
+Poetica shows five layers for domain-rewritten lines:
+
+    Original:  stop motor                  <-- what the student wrote
+    Canonical: seed motor_speed with 0     <-- what Poetica compiled
+    Concept:   actuator_control            <-- the robotics concept
+    Code:      motor_speed = 0             <-- the Python code
+    Visual:    the motor stops spinning    <-- what you'd SEE
+
+And four layers for standard lines:
+
+    Visual:  The value "obstacle detected" leaves the program and appears on screen
+    Phrase:  emit "obstacle detected"
+    Concept: output (Send a value to the screen)
+    Code:    print("obstacle detected")
+
+No naked syntax. Every token has meaning before it has a label.
+
+================================================================================
+  EVIDENCE CRITERIA
+================================================================================
+
+  [ ] student can explain input -> condition -> action
+  [ ] student can modify the threshold (change 10 to a different number)
+  [ ] student can debug a wrong comparison (what if < was >?)

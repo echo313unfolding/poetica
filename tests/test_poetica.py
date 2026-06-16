@@ -2086,3 +2086,121 @@ class TestSyllabus:
             assert len(all_concepts) > 0
         finally:
             os.unlink(tmp_path)
+
+
+# --- Grade 5 Robotics Demo ---
+
+class TestGrade5RoboticsDemo:
+    """Tests for the Grade 5 Robotics full curriculum demo."""
+
+    def _demo_path(self, name):
+        import pathlib
+        return str(pathlib.Path(__file__).parent.parent / "demos" / "grade5_robotics" / name)
+
+    def test_run_demo_exits_zero(self):
+        """run_demo.sh completes without errors."""
+        import pathlib
+        demo_dir = pathlib.Path(__file__).parent.parent
+        result = subprocess.run(
+            ["bash", self._demo_path("run_demo.sh")],
+            cwd=str(demo_dir),
+            capture_output=True, text=True, timeout=60,
+        )
+        assert result.returncode == 0, f"Demo failed:\n{result.stderr}\n{result.stdout[-500:]}"
+
+    def test_generated_curriculum_loads(self):
+        """generated_curriculum.yaml loads with load_curriculum()."""
+        pack = load_curriculum(self._demo_path("generated_curriculum.yaml"))
+        assert pack.curriculum != ""
+        assert pack.grade_band == "5"
+        assert len(pack.units) >= 4
+
+    def test_generated_curriculum_validates(self):
+        """generated_curriculum.yaml has no fatal validation errors."""
+        pack = load_curriculum(self._demo_path("generated_curriculum.yaml"))
+        errors = pack.validate()
+        fatal = [e for e in errors if "unknown op" in e or "name is required" in e]
+        assert len(fatal) == 0, f"Fatal errors: {fatal}"
+
+    def test_lesson_output_has_layers(self):
+        """Lesson file includes Original, Canonical, Concept, Code, Visual."""
+        import pathlib
+        text = pathlib.Path(self._demo_path("lesson_input_condition_action.txt")).read_text()
+        assert "Original:" in text
+        assert "Canonical:" in text
+        assert "Concept:" in text
+        assert "Code:" in text
+        assert "Visual:" in text
+
+    def test_lesson_has_domain_terms(self):
+        """Lesson file shows domain language (stop motor, sensor.distance)."""
+        import pathlib
+        text = pathlib.Path(self._demo_path("lesson_input_condition_action.txt")).read_text()
+        assert "stop motor" in text
+        assert "sensor.distance" in text or "sensor_distance" in text
+
+    def test_evidence_json_valid(self):
+        """evidence JSON has curriculum, concept, evidence_criteria."""
+        import pathlib
+        data = json.loads(pathlib.Path(
+            self._demo_path("evidence_input_condition_action.json")
+        ).read_text())
+        assert "curriculum" in data
+        assert "concept" in data
+        assert "evidence_criteria" in data
+        assert len(data["evidence_criteria"]) >= 2
+        for crit in data["evidence_criteria"]:
+            assert "description" in crit
+            assert "met" in crit
+
+    def test_evidence_criteria_are_observable(self):
+        """Evidence criteria are specific and observable, not letter grades."""
+        import pathlib
+        data = json.loads(pathlib.Path(
+            self._demo_path("evidence_input_condition_action.json")
+        ).read_text())
+        descriptions = [c["description"] for c in data["evidence_criteria"]]
+        # Should have actionable criteria, not vague grades
+        assert any("explain" in d for d in descriptions)
+        assert any("modify" in d or "threshold" in d for d in descriptions)
+
+    def test_visual_has_grid(self):
+        """Visual output shows robot_grid with ASCII grid."""
+        import pathlib
+        text = pathlib.Path(self._demo_path("visual_robot_grid.txt")).read_text()
+        assert "+---+" in text
+        assert "^" in text  # robot arrow
+        assert "Step 1" in text
+
+    def test_demo_transcript_has_full_pipeline(self):
+        """Transcript contains all pipeline steps."""
+        import pathlib
+        text = pathlib.Path(self._demo_path("demo_transcript.txt")).read_text()
+        assert "STEP 1" in text
+        assert "STEP 2" in text
+        assert "STEP 3" in text
+        assert "STEP 4" in text
+        assert "STEP 5" in text
+        assert "STEP 6" in text
+        assert "STEP 7" in text
+
+    def test_demo_transcript_has_lesson(self):
+        """Transcript includes alignment lesson with domain provenance."""
+        import pathlib
+        text = pathlib.Path(self._demo_path("demo_transcript.txt")).read_text()
+        assert "Original:" in text
+        assert "Canonical:" in text
+        assert "motor_speed" in text
+
+    def test_obstacle_poem_compiles_with_domain(self):
+        """obstacle_stop.poem compiles to Python through robotics domain."""
+        import pathlib
+        from poetica.domain import find_domain, load_domain
+        source = pathlib.Path(self._demo_path("obstacle_stop.poem")).read_text()
+        path = find_domain("robotics")
+        pack = load_domain(path)
+        canonical = pack.preprocess(source)
+        code = compile_poem(canonical, target="python", level=2)
+        assert "sensor_distance" in code
+        assert "motor_speed" in code
+        assert "print" in code

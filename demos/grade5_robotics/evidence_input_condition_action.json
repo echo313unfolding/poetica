@@ -1,0 +1,29 @@
+{
+  "curriculum": "grade_5_robotics_and_computing",
+  "concept": "input_condition_action",
+  "phrase": "name obstacle_stop\nseed sensor.distance with 25\nseed motor.speed with 100\nwhen sensor.distance < 10:\n    stop motor\n    emit \"obstacle detected\"\nelse:\n    emit \"path clear\"\nemit sensor.distance\nbloom \"check complete\"",
+  "domain": "robotics",
+  "target_languages": [
+    "python",
+    "javascript"
+  ],
+  "visual_world": "robot_grid",
+  "evidence_criteria": [
+    {
+      "description": "student can explain input -> condition -> action",
+      "type": "observation",
+      "met": null
+    },
+    {
+      "description": "student can modify the threshold",
+      "type": "modification",
+      "met": null
+    },
+    {
+      "description": "student can debug a wrong comparison",
+      "type": "debug",
+      "met": null
+    }
+  ],
+  "notes": "Generated from Grade 5 Robotics curriculum. Teacher review required."
+}
