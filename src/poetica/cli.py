@@ -32,6 +32,7 @@ from poetica.curriculum import (
 from poetica.syllabus import (
     extract_syllabus, inspect_syllabus, draft_curriculum_yaml,
 )
+from poetica.lower import lower_source, lower
 
 
 def _load_source(args, with_map=False):
@@ -321,6 +322,45 @@ def cmd_syllabus(args):
             print(yaml_str)
 
 
+def cmd_lower(args):
+    """Lower a poem to operation tokens (Poetica IR → KRISPER IR bridge)."""
+    domain_pack = None
+    domain = getattr(args, 'domain', None)
+    if domain:
+        path = find_domain(domain)
+        if path is None:
+            print(f"Unknown domain: {domain}. Available: {', '.join(list_domains())}", file=sys.stderr)
+            sys.exit(1)
+        domain_pack = load_domain(path)
+
+    if args.file == '-':
+        source = sys.stdin.read()
+    else:
+        with open(args.file, 'r') as f:
+            source = f.read()
+
+    result = lower_source(source, level=args.level, domain_pack=domain_pack)
+
+    fmt = args.format
+    if args.execute_dry_run:
+        fmt = "krisper"
+
+    if fmt == "krisper":
+        krisper_ir = result.to_krisper_ir()
+        print(json.dumps(krisper_ir, indent=2))
+        if args.execute_dry_run:
+            plan = krisper_ir.get("plan", [])
+            print(f"\n# Dry run: {len(plan)} KRISPER op(s) would execute", file=sys.stderr)
+            for i, op in enumerate(plan):
+                print(f"#   [{i}] {op['op']} → {op['out']}", file=sys.stderr)
+            if result.unsupported:
+                print(f"# {len(result.unsupported)} op(s) could not lower:", file=sys.stderr)
+                for u in result.unsupported:
+                    print(f"#   {u['op']}: {u['reason']}", file=sys.stderr)
+    else:
+        print(result.to_json())
+
+
 def main():
     p = argparse.ArgumentParser(
         prog="poetica",
@@ -441,6 +481,17 @@ def main():
     syl_draft.add_argument("--output", "-o", help="Output file (default: stdout)")
 
     syl.set_defaults(func=cmd_syllabus)
+
+    # lower
+    low = sub.add_parser("lower", help="Lower a poem to operation tokens (Poetica IR → KRISPER IR)")
+    low.add_argument("file", help="Path to .poem file (or - for stdin)")
+    low.add_argument("--format", "-f", choices=["json", "krisper"],
+                     default="json", help="Output format: json (operation tokens) or krisper (KRISPER IR)")
+    low.add_argument("--level", "-l", type=int, default=1, help="Capability level 1-5 (default: 1)")
+    low.add_argument("--domain", "-d", help="Domain pack (e.g. robotics, microbiology, finance)")
+    low.add_argument("--execute-dry-run", action="store_true",
+                     help="Show what KRISPER would execute (does not execute)")
+    low.set_defaults(func=cmd_lower)
 
     args = p.parse_args()
     if not args.command:

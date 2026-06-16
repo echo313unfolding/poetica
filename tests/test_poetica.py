@@ -40,6 +40,7 @@ from poetica.syllabus import (
     extract_syllabus, inspect_syllabus, draft_curriculum_yaml,
     match_concepts, suggest_domain, suggest_visual_worlds, ExtractedUnit,
 )
+from poetica.lower import lower, lower_source, LoweringResult, OperationToken
 
 
 # --- Parser ---
@@ -2204,3 +2205,255 @@ class TestGrade5RoboticsDemo:
         assert "sensor_distance" in code
         assert "motor_speed" in code
         assert "print" in code
+
+
+# --- Unnamed Program Fix ---
+
+class TestUnnamedProgram:
+    """Verify that unnamed poems generate valid code with 'main' as default."""
+
+    def test_unnamed_python_uses_main(self):
+        code = compile_poem("seed x with 42\nemit x", target="python", level=1)
+        assert "def main():" in code
+        assert "def ():" not in code
+
+    def test_unnamed_rust_uses_main(self):
+        code = compile_poem("seed x with 42\nemit x", target="rust", level=1)
+        assert "fn main()" in code
+
+    def test_unnamed_javascript_uses_main(self):
+        code = compile_poem("seed x with 42\nemit x", target="javascript", level=1)
+        assert "function main()" in code
+
+    def test_unnamed_python_is_executable(self):
+        code = compile_poem("seed x with 42\nemit x", target="python", level=1)
+        # Should not raise SyntaxError
+        compile(code, "<test>", "exec")
+
+    def test_named_program_still_works(self):
+        code = compile_poem('name greeter\nseed msg with "hi"\nemit msg', target="python", level=1)
+        assert "def greeter():" in code
+        assert "def main():" not in code
+
+
+# --- Lowering Layer ---
+
+class TestLowering:
+    """Tests for Poetica IR → KRISPER IR lowering (operation token layer)."""
+
+    def test_basic_lower_schema(self):
+        result = lower_source("name hello\nseed x with 42\nemit x", level=1)
+        assert result.schema == "poetica.lower.v1"
+        assert result.source_ir == "poetica-ir-v1"
+        assert result.target_ir == "krisper-ir"
+        assert result.program == "hello"
+        assert result.gate_level == 1
+
+    def test_unnamed_program_defaults_to_main(self):
+        result = lower_source("seed x with 1\nemit x", level=1)
+        assert result.program == "main"
+
+    def test_seed_produces_binding(self):
+        result = lower_source("seed x with 42", level=1)
+        assert len(result.ops) == 1
+        op = result.ops[0]
+        assert op.poetica_op == "seed"
+        assert op.operation_token == "binding.assign"
+        assert op.krisper_op is None  # KRISPER has no seed
+        assert op.status == "binding"
+        assert op.inputs["name"] == "x"
+        assert op.inputs["value"] == "42"
+
+    def test_seed_tracked_in_bindings(self):
+        result = lower_source("seed x with 42\nseed y with 10", level=1)
+        assert result.bindings == {"x": "42", "y": "10"}
+
+    def test_emit_lowers_to_print(self):
+        result = lower_source("seed x with 42\nemit x", level=1)
+        emit_ops = [op for op in result.ops if op.poetica_op == "emit"]
+        assert len(emit_ops) == 1
+        op = emit_ops[0]
+        assert op.operation_token == "output.print"
+        assert op.krisper_op == "print"
+        assert op.status == "lowered"
+        # emit x should resolve x → 42 from bindings
+        assert "42" in op.inputs["message"]
+
+    def test_emit_string_literal(self):
+        result = lower_source('emit "hello world"', level=1)
+        op = result.ops[0]
+        assert op.krisper_op == "print"
+        assert "hello world" in op.inputs["message"]
+
+    def test_bloom_produces_return_token(self):
+        result = lower_source('bloom "done"', level=1)
+        op = result.ops[0]
+        assert op.poetica_op == "bloom"
+        assert op.operation_token == "output.return"
+        assert op.status == "lowered"
+
+    def test_flow_produces_binding(self):
+        result = lower_source("flow result to output", level=1)
+        op = result.ops[0]
+        assert op.poetica_op == "flow"
+        assert op.operation_token == "binding.assign"
+        assert op.status == "binding"
+        assert result.bindings["output"] == "result"
+
+    def test_remember_lowers_to_digest(self):
+        result = lower_source("remember count: 5", level=1)
+        op = result.ops[0]
+        assert op.poetica_op == "remember"
+        assert op.operation_token == "binding.persist"
+        assert op.krisper_op == "digest"
+
+    def test_when_produces_control_metadata(self):
+        result = lower_source("when x > 5:\n    emit x", level=2)
+        when_ops = [op for op in result.ops if op.poetica_op == "when"]
+        assert len(when_ops) == 1
+        assert when_ops[0].status == "control_metadata"
+        assert when_ops[0].operation_token == "control.if"
+        assert when_ops[0].krisper_op is None  # KRISPER has no control flow
+
+    def test_else_produces_control_metadata(self):
+        result = lower_source("when x > 5:\n    emit x\nelse:\n    emit y", level=2)
+        else_ops = [op for op in result.ops if op.poetica_op == "else"]
+        assert len(else_ops) == 1
+        assert else_ops[0].status == "control_metadata"
+
+    def test_for_produces_control_metadata(self):
+        result = lower_source("for each item in items: emit item", level=2)
+        for_ops = [op for op in result.ops if op.poetica_op == "for"]
+        assert len(for_ops) == 1
+        assert for_ops[0].operation_token == "control.for"
+
+    def test_grow_blocked_at_l1(self):
+        result = lower_source("seed x with 1\ngrow list with x", level=1)
+        assert len(result.unsupported) == 1
+        assert result.unsupported[0]["op"] == "grow"
+        assert "requires_level_3" in result.unsupported[0]["reason"]
+
+    def test_grow_allowed_at_l3(self):
+        result = lower_source("seed x with 1\ngrow list with x", level=3)
+        assert len(result.unsupported) == 0
+        grow_ops = [op for op in result.ops if op.poetica_op == "grow"]
+        assert len(grow_ops) == 1
+        assert grow_ops[0].operation_token == "transform.append"
+
+    def test_lift_blocked_at_l1(self):
+        result = lower_source("seed x with 1\nlift x to /tmp/out.txt", level=1)
+        assert any(u["op"] == "lift" for u in result.unsupported)
+
+    def test_use_blocked_at_l1(self):
+        result = lower_source("use api(key: val)", level=1)
+        assert any(u["op"] == "use" for u in result.unsupported)
+
+    def test_gate_pass_tracked(self):
+        result = lower_source("seed x with 1\nemit x", level=1)
+        assert result.receipts["poetica_gate"] == "PASS"
+
+    def test_gate_fail_tracked(self):
+        result = lower_source("seed x with 1\ngrow list with x", level=1)
+        assert "FAIL" in result.receipts["poetica_gate"]
+
+    def test_source_hash_preserved(self):
+        result = lower_source("seed x with 42", level=1)
+        assert len(result.source_hash) == 64  # SHA256 hex
+
+    # --- Domain provenance ---
+
+    def test_robotics_domain_provenance(self):
+        from poetica.domain import load_domain, find_domain
+        dp = load_domain(find_domain("robotics"))
+        source = "name test\nseed sensor.distance with 25\nstop motor"
+        result = lower_source(source, level=1, domain_pack=dp)
+        # Find the seed that was term-rewritten
+        sensor_ops = [op for op in result.ops
+                      if op.domain_provenance and "sensor" in op.domain_provenance.get("original", "")]
+        assert len(sensor_ops) >= 1
+        prov = sensor_ops[0].domain_provenance
+        assert prov["domain"] == "robotics"
+        assert prov["concept"] == "sensor_reading"
+        assert prov["rewrite_type"] == "term"
+
+    def test_stop_motor_phrase_provenance(self):
+        from poetica.domain import load_domain, find_domain
+        dp = load_domain(find_domain("robotics"))
+        source = "name test\nstop motor"
+        result = lower_source(source, level=1, domain_pack=dp)
+        motor_ops = [op for op in result.ops
+                     if op.domain_provenance and op.domain_provenance.get("rewrite_type") == "phrase"]
+        assert len(motor_ops) == 1
+        prov = motor_ops[0].domain_provenance
+        assert prov["original"] == "stop motor"
+        assert prov["concept"] == "actuator_control"
+        assert prov["visual"] == "the motor stops spinning"
+
+    def test_no_provenance_without_domain(self):
+        result = lower_source("seed x with 42\nemit x", level=1)
+        for op in result.ops:
+            assert op.domain_provenance is None
+
+    # --- KRISPER IR output ---
+
+    def test_krisper_ir_structure(self):
+        result = lower_source("name hello\nseed x with 42\nemit x", level=1)
+        kir = result.to_krisper_ir()
+        assert kir["version"] == "0.2"
+        assert kir["metadata"]["lowered_from"] == "poetica-ir-v1"
+        assert kir["metadata"]["program"] == "hello"
+        assert kir["metadata"]["gate_level"] == 1
+        assert isinstance(kir["plan"], list)
+
+    def test_krisper_ir_has_print_for_emit(self):
+        result = lower_source('emit "hello"', level=1)
+        kir = result.to_krisper_ir()
+        assert len(kir["plan"]) == 1
+        assert kir["plan"][0]["op"] == "print"
+        assert kir["plan"][0]["out"] == "result_1"
+        assert "hello" in kir["plan"][0]["in"]["message"]
+
+    def test_krisper_ir_excludes_bindings(self):
+        result = lower_source("seed x with 42\nemit x", level=1)
+        kir = result.to_krisper_ir()
+        # seed should NOT appear in KRISPER plan (it's a binding, not an op)
+        for op in kir["plan"]:
+            assert op["op"] != "seed"
+
+    def test_krisper_ir_excludes_control_metadata(self):
+        result = lower_source("when x > 5:\n    emit x", level=2)
+        kir = result.to_krisper_ir()
+        for op in kir["plan"]:
+            assert op["op"] != "when"
+
+    # --- JSON serialization ---
+
+    def test_to_json_is_valid(self):
+        result = lower_source("seed x with 1\nemit x", level=1)
+        j = result.to_json()
+        parsed = json.loads(j)
+        assert parsed["schema"] == "poetica.lower.v1"
+        assert isinstance(parsed["ops"], list)
+
+    def test_to_dict_roundtrip(self):
+        result = lower_source("seed x with 1\nemit x", level=1)
+        d = result.to_dict()
+        assert d["program"] == "main"
+        assert len(d["ops"]) == 2
+
+    # --- Safety ---
+
+    def test_no_execution_by_default(self):
+        """Lowering should never execute anything — just produce JSON."""
+        result = lower_source('use os.system(cmd: "rm -rf /")', level=4)
+        # use is at L4, allowed at L4, but should only produce a token
+        use_ops = [op for op in result.ops if op.poetica_op == "use"]
+        assert len(use_ops) == 1
+        assert use_ops[0].krisper_op is None  # KRISPER tool dispatch TBD
+        assert use_ops[0].status == "lowered"
+
+    def test_gate_levels_preserved(self):
+        """Each operation token carries its minimum level."""
+        result = lower_source("seed x with 1\nemit x", level=1)
+        for op in result.ops:
+            assert op.level <= result.gate_level

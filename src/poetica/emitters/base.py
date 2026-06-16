@@ -17,7 +17,7 @@ class BaseEmitter:
         if header:
             lines.extend(header)
 
-        name = ir.get("name", "program")
+        name = ir.get("name") or "main"
         lines.extend(self._fn_open(name))
 
         preamble = self._fn_preamble(ir)
