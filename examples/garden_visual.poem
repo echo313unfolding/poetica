@@ -1,0 +1,11 @@
+# Visual Garden — Level 3 (transformation)
+name visual_garden
+
+seed garden with []
+grow garden with "sunflower"
+grow garden with "tomato"
+grow garden with "basil"
+for each plant in garden:
+    emit "watering" plant
+pack garden as json
+bloom "garden flourishing"

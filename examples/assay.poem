@@ -1,0 +1,17 @@
+# Assay Analysis — microbiology domain
+# Use: poetica compile assay.poem --domain microbiology --type sonnet --level 4
+name assay_analysis
+
+seed culture.growth with 0.85
+seed control.baseline with 0.50
+seed sample.status with "unknown"
+
+when culture.growth > control.baseline:
+    mark sample.status as "positive"
+    emit "sample is positive"
+else:
+    mark sample.status as "negative"
+    emit "sample is negative"
+
+export sample.status as json
+bloom "analysis complete"

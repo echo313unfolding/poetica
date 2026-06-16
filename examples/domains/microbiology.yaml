@@ -1,0 +1,49 @@
+domain: microbiology
+name: Microbiology Lab Pack
+description: Lab language for microbiology assay analysis
+
+terms:
+  culture.growth:
+    concept: time_series_measurement
+    maps_to: culture_growth
+    visual: growth curve rising on a graph
+  control.baseline:
+    concept: reference_value
+    maps_to: control_baseline
+    visual: the baseline reference line
+  sample.signal:
+    concept: measured_value
+    maps_to: sample_signal
+    visual: signal strength on a readout
+  sample.status:
+    concept: classification_label
+    maps_to: sample_status
+    visual: a status tag on the sample
+
+phrases:
+  "flag {x} as {label}":
+    pattern: "remember {x}: {label}"
+    concept: classification
+    visual: a label gets attached to the data
+  "mark {x} as {label}":
+    pattern: "remember {x}: {label}"
+    concept: classification
+    visual: a tag is placed on the sample
+  "plot {y} over {x}":
+    pattern: "use plot(y: {y}, x: {x})"
+    concept: visualization
+    visual: a chart appears showing {y} changing over {x}
+  "export {data} as {fmt}":
+    pattern: "pack {data} as {fmt}"
+    concept: data_export
+    visual: the data gets wrapped into a portable file
+
+visuals:
+  seed: "A sample container labeled '{name}' is prepared with {value}"
+  emit: "The result {value} is displayed on the lab monitor"
+  when: "The lab protocol checks: {condition}"
+  grow: "Another measurement is added to {name}: {source}"
+  for: "Each {var} in {collection} is examined one by one"
+  pack: "The data {data} is packaged for export as {format}"
+  remember: "The lab notebook records: {key} = {value}"
+  bloom: "Analysis complete: {value}"

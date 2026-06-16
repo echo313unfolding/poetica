@@ -1,0 +1,15 @@
+# Sensor Check — robotics domain
+# Use: poetica compile sensor.poem --domain robotics --type sonnet --level 2
+name sensor_check
+
+seed sensor.distance with 25
+seed motor.speed with 100
+
+when sensor.distance < 10:
+    stop motor
+    emit "obstacle detected, stopping"
+else:
+    emit "path clear"
+
+emit sensor.distance
+bloom "check complete"

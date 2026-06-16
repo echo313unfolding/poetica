@@ -1,0 +1,46 @@
+domain: robotics
+name: Robotics Pack
+description: Sensor and motor language for robotics
+
+terms:
+  sensor.distance:
+    concept: sensor_reading
+    maps_to: sensor_distance
+    visual: the ultrasonic sensor beam bouncing back
+  sensor.temperature:
+    concept: sensor_reading
+    maps_to: sensor_temp
+    visual: the temperature gauge
+  motor.speed:
+    concept: actuator_state
+    maps_to: motor_speed
+    visual: the motor spinning
+
+phrases:
+  "stop motor":
+    pattern: "seed motor_speed with 0"
+    concept: actuator_control
+    visual: the motor stops spinning
+  "start motor at {speed}":
+    pattern: "seed motor_speed with {speed}"
+    concept: actuator_control
+    visual: the motor begins spinning at {speed}
+  "read sensor {name}":
+    pattern: "use sensor.read(name: {name})"
+    concept: sensor_input
+    visual: the sensor takes a measurement
+  "turn {direction}":
+    pattern: "seed direction with \"{direction}\""
+    concept: navigation
+    visual: the robot rotates to face {direction}
+  "move forward {steps}":
+    pattern: "flow y + {steps} to y"
+    concept: locomotion
+    visual: the robot advances {steps} steps
+
+visuals:
+  seed: "The robot's '{name}' is set to {value}"
+  emit: "The robot reports: {value}"
+  when: "The robot checks its sensors: {condition}"
+  flow: "The robot moves: {source} updates {dest}"
+  bloom: "Mission complete: {value}"

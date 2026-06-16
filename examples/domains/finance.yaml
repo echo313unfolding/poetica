@@ -1,0 +1,40 @@
+domain: finance
+name: Finance Pack
+description: Financial analysis language
+
+terms:
+  cashflow.actual:
+    concept: financial_metric
+    maps_to: cashflow_actual
+    visual: the actual cash flow bar on the chart
+  cashflow.forecast:
+    concept: projection
+    maps_to: cashflow_forecast
+    visual: the projected forecast line
+  project.risk:
+    concept: risk_indicator
+    maps_to: project_risk
+    visual: the risk gauge moving
+
+phrases:
+  "flag {x} risk":
+    pattern: "remember {x}: \"at_risk\""
+    concept: risk_classification
+    visual: a warning flag appears on {x}
+  "calculate {metric} margin":
+    pattern: "use calc.margin(metric: {metric})"
+    concept: financial_calculation
+    visual: the margin percentage appears on the dashboard
+  "report {data} as {fmt}":
+    pattern: "pack {data} as {fmt}"
+    concept: financial_reporting
+    visual: the financial report is generated
+
+visuals:
+  seed: "The ledger entry '{name}' is initialized with {value}"
+  emit: "The dashboard displays: {value}"
+  when: "The financial rule checks: {condition}"
+  grow: "A new transaction is added to {name}: {source}"
+  pack: "The report {data} is formatted as {format}"
+  remember: "The ledger records: {key} = {value}"
+  bloom: "Report finalized: {value}"

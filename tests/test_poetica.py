@@ -17,6 +17,18 @@ from poetica.canvas import (
     visualize_poem, visualize_command, to_mermaid, to_json_graph, to_ascii,
     VisualNode,
 )
+from poetica.visual import (
+    RobotGridWorld, GardenWorld, FilesystemWorld,
+    get_world, list_worlds, Frame,
+)
+from poetica.playground import play_poem, render_playback
+from poetica.alignment import (
+    align_poem, to_table, to_annotated, to_lesson, to_json as align_to_json,
+    AlignmentSpan,
+)
+from poetica.domain import (
+    DomainPack, load_domain, find_domain, list_domains,
+)
 
 
 # --- Parser ---
@@ -869,3 +881,533 @@ class TestCanvas:
     def test_empty_command(self):
         nodes = visualize_command("")
         assert nodes == []
+
+
+# --- Visual Worlds ---
+
+class TestVisualWorlds:
+    def test_list_worlds(self):
+        worlds = list_worlds()
+        assert "robot_grid" in worlds
+        assert "garden" in worlds
+        assert "filesystem" in worlds
+
+    def test_get_world(self):
+        w = get_world("robot_grid")
+        assert isinstance(w, RobotGridWorld)
+
+    def test_get_world_unknown_raises(self):
+        with pytest.raises(ValueError):
+            get_world("moon_base")
+
+    def test_robot_seed_sets_position(self):
+        w = RobotGridWorld()
+        frame = w.step({"op": "seed", "name": "x", "value": "2"})
+        assert w.x == 2
+        assert frame.op == "seed"
+        assert "x" in frame.description
+
+    def test_robot_flow_moves(self):
+        w = RobotGridWorld()
+        w.step({"op": "seed", "name": "x", "value": "0"})
+        frame = w.step({"op": "flow", "source": "x + 1", "dest": "x"})
+        assert w.x == 1
+        assert frame.op == "flow"
+
+    def test_robot_flow_clamps(self):
+        w = RobotGridWorld(width=3, height=3)
+        w.x = 2
+        w.step({"op": "flow", "source": "x + 1", "dest": "x"})
+        assert w.x == 2  # clamped at width-1
+
+    def test_robot_render_has_arrow(self):
+        w = RobotGridWorld(width=3, height=3)
+        output = w.render()
+        assert "^" in output  # default direction is north
+
+    def test_robot_direction(self):
+        w = RobotGridWorld()
+        w.step({"op": "seed", "name": "direction", "value": '"east"'})
+        assert w.direction == "east"
+        output = w.render()
+        assert ">" in output
+
+    def test_robot_trail(self):
+        w = RobotGridWorld()
+        w.step({"op": "flow", "source": "x + 1", "dest": "x"})
+        assert (0, 0) in w.trail
+        assert (1, 0) in w.trail
+
+    def test_garden_grow_adds_plant(self):
+        w = GardenWorld()
+        w.step({"op": "grow", "name": "garden", "source": '"tomato"'})
+        assert len(w.plants) == 1
+        assert w.plants[0]["name"] == "tomato"
+
+    def test_garden_emit_waters(self):
+        w = GardenWorld()
+        w.step({"op": "grow", "name": "garden", "source": '"rose"'})
+        assert w.plants[0]["stage"] == 1
+        w.step({"op": "emit", "value": "rose"})
+        assert w.plants[0]["stage"] == 2
+
+    def test_garden_bloom_maxes(self):
+        w = GardenWorld()
+        w.step({"op": "grow", "name": "garden", "source": '"lily"'})
+        w.step({"op": "bloom", "value": "done"})
+        assert w.plants[0]["stage"] == 3
+
+    def test_garden_render_shows_plants(self):
+        w = GardenWorld()
+        w.step({"op": "grow", "name": "garden", "source": '"basil"'})
+        output = w.render()
+        assert "basi" in output  # truncated to 4 chars
+        assert "o" in output  # stage 1 icon
+
+    def test_garden_empty_render(self):
+        w = GardenWorld()
+        output = w.render()
+        assert "empty" in output
+
+    def test_filesystem_seed_path(self):
+        w = FilesystemWorld()
+        w.step({"op": "seed", "name": "path", "value": '"/tmp"'})
+        assert w.cwd == "/tmp"
+
+    def test_filesystem_seed_files(self):
+        w = FilesystemWorld()
+        w.step({"op": "seed", "name": "files", "value": '["a.txt", "b.md"]'})
+        assert len(w.files) == 2
+        assert "a.txt" in w.files
+
+    def test_filesystem_grow_adds_file(self):
+        w = FilesystemWorld()
+        w.step({"op": "grow", "name": "files", "source": '"new.py"'})
+        assert "new.py" in w.files
+
+    def test_filesystem_render_tree(self):
+        w = FilesystemWorld()
+        w.step({"op": "seed", "name": "files", "value": '["x.py", "y.rs"]'})
+        output = w.render()
+        assert "x.py" in output
+        assert "y.rs" in output
+        assert "/home/" in output
+
+    def test_filesystem_empty_render(self):
+        w = FilesystemWorld()
+        output = w.render()
+        assert "empty" in output
+
+
+# --- Playground ---
+
+class TestPlayground:
+    def _read_example(self, name):
+        import pathlib
+        path = pathlib.Path(__file__).parent.parent / "examples" / name
+        return path.read_text()
+
+    def test_play_robot_produces_frames(self):
+        source = self._read_example("robot.poem")
+        frames = play_poem(source, "robot_grid")
+        assert len(frames) > 0
+        assert all(isinstance(f, Frame) for f in frames)
+
+    def test_play_garden_produces_frames(self):
+        source = self._read_example("garden_visual.poem")
+        frames = play_poem(source, "garden")
+        assert len(frames) > 0
+        # Should have grow frames
+        grow_frames = [f for f in frames if f.op == "grow"]
+        assert len(grow_frames) == 3  # sunflower, tomato, basil
+
+    def test_play_filesystem_produces_frames(self):
+        source = self._read_example("filesystem_visual.poem")
+        frames = play_poem(source, "filesystem")
+        assert len(frames) > 0
+
+    def test_render_playback_has_structure(self):
+        source = self._read_example("hello.poem")
+        frames = play_poem(source, "robot_grid")
+        output = render_playback(frames, "hello")
+        assert "PLAY: hello" in output
+        assert "END" in output
+        assert "Step 1" in output
+
+    def test_play_hello_in_all_worlds(self):
+        source = self._read_example("hello.poem")
+        for world in list_worlds():
+            frames = play_poem(source, world)
+            assert len(frames) > 0
+
+    def test_play_unknown_world_raises(self):
+        with pytest.raises(ValueError):
+            play_poem("seed x with 1", "atlantis")
+
+    def test_each_frame_has_state(self):
+        source = self._read_example("robot.poem")
+        frames = play_poem(source, "robot_grid")
+        for frame in frames:
+            assert frame.state_ascii  # non-empty
+            assert frame.description  # non-empty
+            assert frame.step > 0
+
+
+# --- Alignment Map ---
+
+class TestAlignment:
+    def _read_example(self, name):
+        import pathlib
+        path = pathlib.Path(__file__).parent.parent / "examples" / name
+        return path.read_text()
+
+    def test_hello_alignment_python(self):
+        source = self._read_example("hello.poem")
+        spans = align_poem(source, target="python")
+        assert len(spans) > 0
+        # First span should be seed
+        assert spans[0].ir_op == "seed"
+        assert spans[0].concept == "variable"
+        assert "=" in spans[0].target_text
+        assert spans[0].visual_role == "declare"
+
+    def test_alignment_has_all_fields(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="python")
+        for span in spans:
+            assert span.source_line > 0
+            assert span.source_text
+            assert span.ir_op
+            assert span.concept
+            assert span.target == "python"
+            assert span.target_text
+            assert span.visual_role
+            assert span.explanation
+            assert span.gate_level >= 0
+
+    def test_alignment_target_matches_emitter(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="python")
+        seed_span = spans[0]
+        assert seed_span.target_text == 'x = 42'
+        emit_span = spans[1]
+        assert "print" in emit_span.target_text
+
+    def test_alignment_javascript_target(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="javascript")
+        assert spans[0].target == "javascript"
+        assert "let" in spans[0].target_text or "const" in spans[0].target_text or "var" in spans[0].target_text
+
+    def test_alignment_roles(self):
+        source = self._read_example("fizzbuzz.poem")
+        spans = align_poem(source, target="python")
+        roles = {s.visual_role for s in spans}
+        assert "declare" in roles
+        assert "control" in roles
+        assert "output" in roles
+
+    def test_alignment_gate_levels(self):
+        source = self._read_example("garden.poem")
+        spans = align_poem(source, target="python")
+        # grow and pack are L3
+        grow_spans = [s for s in spans if s.ir_op == "grow"]
+        assert grow_spans[0].gate_level == 3
+        pack_spans = [s for s in spans if s.ir_op == "pack"]
+        assert pack_spans[0].gate_level == 3
+
+    def test_table_output(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="python")
+        output = to_table(spans)
+        assert "Line" in output
+        assert "Source" in output
+        assert "Concept" in output
+        assert "Target" in output
+        assert "Role" in output
+        assert "seed x with 42" in output
+
+    def test_annotated_output(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="python")
+        output = to_annotated(spans)
+        assert "seed x with 42" in output
+        assert "[variable]" in output
+        assert "x = 42" in output
+
+    def test_json_output(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="python")
+        output = align_to_json(spans)
+        data = json.loads(output)
+        assert len(data) == 2
+        assert data[0]["ir_op"] == "seed"
+        assert data[0]["source_text"] == "seed x with 42"
+        assert data[0]["target_text"] == "x = 42"
+
+    def test_empty_source(self):
+        spans = align_poem("# comment only")
+        assert spans == []
+
+    def test_table_empty(self):
+        output = to_table([])
+        assert "no operations" in output
+
+    def test_all_targets(self):
+        source = "name test\nseed x with 42\nemit x"
+        for target in ["python", "javascript", "rust", "go", "bash", "sql"]:
+            spans = align_poem(source, target=target)
+            assert len(spans) == 2
+            assert spans[0].target == target
+
+    def test_visual_layer_seed(self):
+        source = "name test\nseed x with 42"
+        spans = align_poem(source, target="python")
+        assert spans[0].visual
+        assert "x" in spans[0].visual
+        assert "42" in spans[0].visual
+        assert "box" in spans[0].visual.lower()
+
+    def test_visual_layer_emit(self):
+        source = "name test\nemit hello"
+        spans = align_poem(source, target="python")
+        assert "screen" in spans[0].visual.lower()
+
+    def test_visual_layer_when(self):
+        source = "name test\nwhen ready:"
+        spans = align_poem(source, target="python")
+        assert "fork" in spans[0].visual.lower()
+
+    def test_visual_layer_for(self):
+        source = "name test\nfor each item in items:"
+        spans = align_poem(source, target="python")
+        assert "loop" in spans[0].visual.lower()
+        assert "item" in spans[0].visual
+
+    def test_visual_layer_flow(self):
+        source = "name test\nflow input to output"
+        spans = align_poem(source, target="python")
+        assert "moves" in spans[0].visual.lower() or "flow" in spans[0].visual.lower()
+
+    def test_visual_layer_grow(self):
+        source = "name test\ngrow items with \"x\""
+        spans = align_poem(source, target="python")
+        assert "collection" in spans[0].visual.lower()
+
+    def test_lesson_output(self):
+        source = "name test\nseed x with 42\nemit x"
+        spans = align_poem(source, target="python")
+        output = to_lesson(spans)
+        assert "Visual:" in output
+        assert "Phrase:" in output
+        assert "Concept:" in output
+        assert "Code:" in output
+        # Visual layer content
+        assert "box" in output.lower()
+        # Phrase layer
+        assert "seed x with 42" in output
+        # Concept layer
+        assert "variable" in output
+        # Code layer
+        assert "x = 42" in output
+
+    def test_lesson_empty(self):
+        output = to_lesson([])
+        assert "no operations" in output
+
+    def test_lesson_four_layers_per_op(self):
+        source = "name test\nseed x with 42"
+        spans = align_poem(source, target="python")
+        output = to_lesson(spans)
+        assert output.count("Visual:") == 1
+        assert output.count("Phrase:") == 1
+        assert output.count("Concept:") == 1
+        assert output.count("Code:") == 1
+
+    def test_json_includes_visual(self):
+        source = "name test\nseed x with 42"
+        spans = align_poem(source, target="python")
+        output = align_to_json(spans)
+        data = json.loads(output)
+        assert "visual" in data[0]
+        assert "box" in data[0]["visual"].lower()
+
+
+# --- Domain Packs ---
+
+class TestDomainPacks:
+    def _read_example(self, name):
+        import pathlib
+        path = pathlib.Path(__file__).parent.parent / "examples" / name
+        return path.read_text()
+
+    def test_list_domains(self):
+        domains = list_domains()
+        assert "microbiology" in domains
+        assert "robotics" in domains
+        assert "finance" in domains
+
+    def test_find_domain(self):
+        path = find_domain("microbiology")
+        assert path is not None
+        assert path.endswith(".yaml")
+
+    def test_find_domain_missing(self):
+        path = find_domain("underwater_basket_weaving")
+        assert path is None
+
+    def test_load_microbiology(self):
+        path = find_domain("microbiology")
+        pack = load_domain(path)
+        assert pack.domain == "microbiology"
+        assert pack.name == "Microbiology Lab Pack"
+        assert "culture.growth" in pack.terms
+        assert len(pack.phrases) > 0
+
+    def test_term_substitution(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            terms={
+                "culture.growth": {"maps_to": "culture_growth"},
+                "control.baseline": {"maps_to": "control_baseline"},
+            },
+        )
+        result = pack.preprocess("seed culture.growth with 0.85")
+        assert result == "seed culture_growth with 0.85"
+
+    def test_term_substitution_in_condition(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            terms={
+                "culture.growth": {"maps_to": "culture_growth"},
+                "control.baseline": {"maps_to": "control_baseline"},
+            },
+        )
+        result = pack.preprocess("when culture.growth > control.baseline:")
+        assert result == "when culture_growth > control_baseline:"
+
+    def test_phrase_rewriting(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            phrases={
+                "flag {x} as {label}": {
+                    "pattern": 'remember {x}: {label}',
+                },
+            },
+        )
+        result = pack.preprocess('flag sample as "positive"')
+        assert result == 'remember sample: "positive"'
+
+    def test_phrase_export(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            phrases={
+                "export {data} as {fmt}": {
+                    "pattern": "pack {data} as {fmt}",
+                },
+            },
+        )
+        result = pack.preprocess("export results as json")
+        assert result == "pack results as json"
+
+    def test_term_and_phrase_combined(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            terms={
+                "sample.status": {"maps_to": "sample_status"},
+            },
+            phrases={
+                "mark {x} as {label}": {
+                    "pattern": 'remember {x}: {label}',
+                },
+            },
+        )
+        result = pack.preprocess('mark sample.status as "positive"')
+        assert result == 'remember sample_status: "positive"'
+
+    def test_preserves_comments(self):
+        pack = DomainPack(name="test", domain="test",
+                          terms={"x.y": {"maps_to": "x_y"}})
+        result = pack.preprocess("# this is a comment\nseed x.y with 1")
+        assert "# this is a comment" in result
+
+    def test_preserves_indentation(self):
+        pack = DomainPack(name="test", domain="test",
+                          terms={"x.y": {"maps_to": "x_y"}})
+        result = pack.preprocess("when ready:\n    seed x.y with 1")
+        lines = result.split("\n")
+        assert lines[1] == "    seed x_y with 1"
+
+    def test_preserves_blank_lines(self):
+        pack = DomainPack(name="test", domain="test",
+                          terms={"x.y": {"maps_to": "x_y"}})
+        result = pack.preprocess("seed x.y with 1\n\nemit x_y")
+        assert "\n\n" in result
+
+    def test_microbiology_assay_compiles(self):
+        """Full pipeline: domain poem → preprocess → compile."""
+        path = find_domain("microbiology")
+        pack = load_domain(path)
+        source = self._read_example("assay.poem")
+        canonical = pack.preprocess(source)
+        # After preprocessing, domain terms should be underscored
+        assert "culture_growth" in canonical
+        assert "control_baseline" in canonical
+        # Should compile to Python
+        code = compile_poem(canonical, target="python", level=4)
+        assert "culture_growth" in code
+        assert "print" in code
+
+    def test_robotics_sensor_compiles(self):
+        path = find_domain("robotics")
+        pack = load_domain(path)
+        source = self._read_example("sensor.poem")
+        canonical = pack.preprocess(source)
+        assert "sensor_distance" in canonical
+        assert "motor_speed" in canonical
+        code = compile_poem(canonical, target="python", level=2)
+        assert "sensor_distance" in code
+
+    def test_domain_visual_override(self):
+        pack = DomainPack(
+            name="test", domain="test",
+            visuals={"seed": "A test tube labeled '{name}' is prepared with {value}"},
+        )
+        visual = pack.get_visual("seed")
+        assert visual is not None
+        assert "test tube" in visual
+
+    def test_domain_visual_none_for_missing(self):
+        pack = DomainPack(name="test", domain="test")
+        assert pack.get_visual("seed") is None
+
+    def test_no_domain_passthrough(self):
+        """Without a domain pack, source passes through unchanged."""
+        source = "seed culture.growth with 0.85"
+        parser = PoeticaParser()
+        elements = parser.parse(source)
+        # Parser sees culture.growth as the label (matches [^\s]+)
+        assert elements[0].label == "culture.growth"
+
+    def test_microbiology_alignment_lesson(self):
+        path = find_domain("microbiology")
+        pack = load_domain(path)
+        source = self._read_example("assay.poem")
+        canonical = pack.preprocess(source)
+        spans = align_poem(canonical, target="python")
+        output = to_lesson(spans)
+        assert "Visual:" in output
+        assert "Phrase:" in output
+        assert "Code:" in output
+
+    def test_robotics_stop_motor_phrase(self):
+        path = find_domain("robotics")
+        pack = load_domain(path)
+        result = pack.preprocess("stop motor")
+        assert "seed motor_speed with 0" in result
+
+    def test_finance_flag_risk(self):
+        path = find_domain("finance")
+        pack = load_domain(path)
+        result = pack.preprocess("flag project risk")
+        assert 'remember project: "at_risk"' in result

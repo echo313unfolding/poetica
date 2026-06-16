@@ -1,0 +1,19 @@
+# Robot Grid — Level 2 (logic)
+name robot
+
+seed x with 0
+seed y with 0
+seed direction with "north"
+
+when direction echoes "north":
+    flow y + 1 to y
+    emit "moved north"
+else when direction echoes "east":
+    flow x + 1 to x
+    emit "moved east"
+else:
+    emit "standing still"
+
+emit x
+emit y
+bloom "robot stopped"

@@ -1,0 +1,9 @@
+# Filesystem Explorer — Level 2 (logic)
+name filesystem
+
+seed path with "/home"
+seed files with ["readme.md", "config.yaml", "data.csv"]
+for each file in files:
+    emit file
+emit path
+bloom "listing complete"
